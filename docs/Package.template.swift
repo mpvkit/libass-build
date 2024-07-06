@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "libass",
     products: [
-        .library(name: "Libuchardet", targets: ["Libuchardet"]),
+        .library(name: "Libunibreak", targets: ["Libunibreak"]),
         .library(name: "Libfreetype", targets: ["Libfreetype"]),
         .library(name: "Libfribidi", targets: ["Libfribidi"]),
         .library(name: "Libharfbuzz", targets: ["Libharfbuzz"]),
@@ -18,9 +18,9 @@ let package = Package(
             exclude:["patch"]
         ),
         .binaryTarget(
-            name: "Libuchardet",
-            url: "\(Libuchardet_url)",
-            checksum: "\(Libuchardet_checksum)"
+            name: "Libunibreak",
+            url: "\(Libunibreak_url)",
+            checksum: "\(Libunibreak_checksum)"
         ),
         .binaryTarget(
             name: "Libfreetype",
