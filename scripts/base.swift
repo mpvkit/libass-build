@@ -435,20 +435,23 @@ class BaseBuild {
 
     private func packageRelease() throws {
         let releaseDirPath = URL.currentDirectory + ["release"]
-        try? FileManager.default.removeItem(at: releaseDirPath)
-        try? FileManager.default.createDirectory(at: releaseDirPath, withIntermediateDirectories: true, attributes: nil)
+        if !FileManager.default.fileExists(atPath: releaseDirPath.path) {
+            try? FileManager.default.createDirectory(at: releaseDirPath, withIntermediateDirectories: true, attributes: nil)
+        }
+        let releaseLibPath = releaseDirPath + [library.rawValue]
+        try? FileManager.default.removeItem(at: releaseLibPath)
 
         // copy static libraries
         for platform in BaseBuild.platforms {
             for arch in architectures(platform) {
-                 let libPath = thinDir(platform: platform, arch: arch) + ["lib"]
-                 let staticLibraries = try FileManager.default.contentsOfDirectory(atPath: libPath.path).filter { $0.hasSuffix(".a") }
+                 let thinLibPath = thinDir(platform: platform, arch: arch) + ["lib"]
+                 let staticLibraries = try FileManager.default.contentsOfDirectory(atPath: thinLibPath.path).filter { $0.hasSuffix(".a") }
 
-                 let releaseLibPath = releaseDirPath + [library.rawValue, "lib", platform.rawValue, "thin", arch.rawValue, "lib"]
-                 try? FileManager.default.createDirectory(at: releaseLibPath, withIntermediateDirectories: true, attributes: nil)
+                 let releaseThinLibPath = releaseDirPath + [library.rawValue, "lib", platform.rawValue, "thin", arch.rawValue, "lib"]
+                 try? FileManager.default.createDirectory(at: releaseThinLibPath, withIntermediateDirectories: true, attributes: nil)
                  for lib in staticLibraries {
-                    let sourceURL = libPath + [lib]
-                    let destinationURL = releaseLibPath + [lib]
+                    let sourceURL = thinLibPath + [lib]
+                    let destinationURL = releaseThinLibPath + [lib]
                     try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
                 }
             }
@@ -469,6 +472,7 @@ class BaseBuild {
         // zip build artifacts
         let sourceLib = library.rawValue
         let destZipLibPath = releaseDirPath + [library.rawValue + "-all.zip"]
+        try? FileManager.default.removeItem(at: destZipLibPath)
         Utility.shell("zip -qr \(destZipLibPath.path) \(sourceLib)", currentDirectoryURL: releaseDirPath)
 
         // zip xcframeworks
@@ -485,6 +489,8 @@ class BaseBuild {
             let XCFrameworkFile =  framework + ".xcframework"
             let zipFile = releaseDirPath + [framework + ".xcframework.zip"]
             let checksumFile = releaseDirPath + [framework + ".xcframework.checksum.txt"]
+            try? FileManager.default.removeItem(at: zipFile)
+            try? FileManager.default.removeItem(at: checksumFile)
             Utility.shell("zip -qr \(zipFile.path) \(XCFrameworkFile)", currentDirectoryURL: URL.currentDirectory + ["../Sources"])
             Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
         }
@@ -822,7 +828,7 @@ enum Utility {
             }
         } else {
             if let logURL = logURL {
-                print("please view log file for detail: \(logURL)\n")
+                print(String(data: try Data(contentsOf: logURL), encoding: .utf8)!)
             }
             throw NSError(domain: "fail", code: Int(task.terminationStatus))
         }

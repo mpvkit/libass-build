@@ -10,7 +10,7 @@ do {
     try BuildASS().buildALL()
 } catch {
     print(error.localizedDescription)
-    exit(0)
+    exit(1)
 }
 
 
