@@ -15,7 +15,12 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Install dependencies
+      run: |
+        brew install autoconf
+        brew install automake
+        
     - name: Build
       run: |
         swift run build

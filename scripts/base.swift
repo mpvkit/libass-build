@@ -828,7 +828,7 @@ enum Utility {
             }
         } else {
             if let logURL = logURL {
-                print(String(data: try Data(contentsOf: logURL), encoding: .utf8)!)
+                print("please view log file for detail: \(logURL)\n")
             }
             throw NSError(domain: "fail", code: Int(task.terminationStatus))
         }
