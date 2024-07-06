@@ -30,10 +30,10 @@ jobs:
       run: |
         rm -f ./Package.swift
         cp -f ./docs/Package.template.swift ./Package.swift
-        Libuchardet_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libuchardet.xcframework.zip"
-        Libuchardet_checksum=$(cat ./dist/release/Libuchardet.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libuchardet_url)#${Libuchardet_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libuchardet_checksum)#${Libuchardet_checksum}#g" ./Package.swift
+        Libunibreak_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libunibreak.xcframework.zip"
+        Libunibreak_checksum=$(cat ./dist/release/Libunibreak.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libunibreak_url)#${Libunibreak_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libunibreak_checksum)#${Libunibreak_checksum}#g" ./Package.swift
 
         Libfreetype_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libfreetype.xcframework.zip"
         Libfreetype_checksum=$(cat ./dist/release/Libfreetype.xcframework.checksum.txt)
