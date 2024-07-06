@@ -31,7 +31,7 @@ let package = Package(
             name: "Libfribidi",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libfribidi.xcframework.zip",
             checksum: "91fe4e1e4da17e443cba4a019bd75ac4395e09e0fe7a09685dc59e807455ef17"
-        )
+        ),
         .binaryTarget(
             name: "Libharfbuzz",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libharfbuzz.xcframework.zip",
