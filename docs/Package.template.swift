@@ -31,7 +31,7 @@ let package = Package(
             name: "Libfribidi",
             url: "\(Libfribidi_url)",
             checksum: "\(Libfribidi_checksum)"
-        )
+        ),
         .binaryTarget(
             name: "Libharfbuzz",
             url: "\(Libharfbuzz_url)",
