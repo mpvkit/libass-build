@@ -1,0 +1,69 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        default: '0.0.0'
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build
+      run: |
+        swift run build
+        
+    - name: Update Package.swift
+      run: |
+        rm -f ./Package.swift
+        cp -f ./docs/Package.template.swift ./Package.swift
+        Libuchardet_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libuchardet.xcframework.zip"
+        Libuchardet_checksum=$(cat ./dist/release/Libuchardet.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libuchardet_url)#${Libuchardet_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libuchardet_checksum)#${Libuchardet_checksum}#g" ./Package.swift
+
+        Libfreetype_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libfreetype.xcframework.zip"
+        Libfreetype_checksum=$(cat ./dist/release/Libfreetype.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libfreetype_url)#${Libfreetype_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libfreetype_checksum)#${Libfreetype_checksum}#g" ./Package.swift
+
+        Libfribidi_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libfribidi.xcframework.zip"
+        Libfribidi_checksum=$(cat ./dist/release/Libfribidi.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libfribidi_url)#${Libfribidi_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libfribidi_checksum)#${Libfribidi_checksum}#g" ./Package.swift
+
+        Libharfbuzz_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libharfbuzz.xcframework.zip"
+        Libharfbuzz_checksum=$(cat ./dist/release/Libharfbuzz.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libharfbuzz_url)#${Libharfbuzz_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libharfbuzz_checksum)#${Libharfbuzz_checksum}#g" ./Package.swift
+
+        Libass_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libass.xcframework.zip"
+        Libass_checksum=$(cat ./dist/release/Libass.xcframework.checksum.txt)
+        sed -i '' "s#\\\(Libass_url)#${Libass_url}#g" ./Package.swift
+        sed -i '' "s#\\\(Libass_checksum)#${Libass_checksum}#g" ./Package.swift
+
+    - name: Push Package.swift
+      uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        add: "Package.swift"
+        message: "chore: release version ${{ github.event.inputs.version }}"
+        push: "origin HEAD:${{ github.ref_name }}"
+        
+    - name: Upload binary to GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: ${{ github.event.inputs.version }}
+        tag_name: ${{ github.event.inputs.version }}
+        files: |
+          ./dist/release/*.txt
+          ./dist/release/*.zip
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+        fail_on_unmatched_files: true
