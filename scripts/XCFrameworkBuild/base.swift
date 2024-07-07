@@ -491,6 +491,8 @@ class BaseBuild {
             let checksumFile = releaseDirPath + [framework + ".xcframework.checksum.txt"]
             try? FileManager.default.removeItem(at: zipFile)
             try? FileManager.default.removeItem(at: checksumFile)
+            print("##############")
+            print((URL.currentDirectory + ["../Sources"]).path)
             Utility.shell("zip -qr \(zipFile.path) \(XCFrameworkFile)", currentDirectoryURL: URL.currentDirectory + ["../Sources"])
             Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
         }

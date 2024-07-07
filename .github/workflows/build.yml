@@ -24,7 +24,7 @@ jobs:
 
     - name: Build
       run: |
-        swift run build
+        swift run --package-path scripts
         
     - name: Update Package.swift
       run: |
@@ -59,7 +59,9 @@ jobs:
       uses: EndBug/add-and-commit@v9
       with:
         default_author: github_actions
-        add: "Package.swift"
+        add: |
+          - Package.swift
+          - Sources
         message: "chore: release version ${{ github.event.inputs.version }}"
         push: "origin HEAD:${{ github.ref_name }}"
         

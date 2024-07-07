@@ -5,17 +5,18 @@ import PackageDescription
 let package = Package(
     name: "libass",
     products: [
-        .library(name: "Libunibreak", targets: ["Libunibreak"]),
-        .library(name: "Libfreetype", targets: ["Libfreetype"]),
-        .library(name: "Libfribidi", targets: ["Libfribidi"]),
-        .library(name: "Libharfbuzz", targets: ["Libharfbuzz"]),
-        .library(name: "Libass", targets: ["Libass"])
+        .library(
+            name: "libass",
+            type: .static,
+            targets: ["ass"]
+        ),
     ],
     targets: [
-        .executableTarget(
-            name: "build",
-            path: "scripts",
-            exclude:["patch"]
+        .target(
+            name: "ass",
+            dependencies: [
+                "Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"
+            ]
         ),
         .binaryTarget(
             name: "Libunibreak",

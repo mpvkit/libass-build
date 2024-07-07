@@ -65,6 +65,17 @@ private class BuildASS: BaseBuild {
             "-Dprofile=false",
         ]
     }
+
+    override func buildALL() throws {
+        try super.buildALL()
+
+        // copy headers
+        let includeSourceDirectory = URL.currentDirectory + "../Sources/Libass.xcframework/ios-arm64/Libass.framework/Headers/ass"
+        let includeDestDirectory = URL.currentDirectory + "../Sources/ass/include"
+        print("Copy ass headers to path: \(includeDestDirectory.path)")
+        try? FileManager.default.removeItem(at: includeDestDirectory)
+        try? FileManager.default.copyItem(at: includeSourceDirectory, to: includeDestDirectory)
+    }
 }
 
 
