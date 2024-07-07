@@ -8,12 +8,12 @@ let package = Package(
         .library(
             name: "libass",
             type: .static,
-            targets: ["libass"]
+            targets: ["ass"]
         ),
     ],
     targets: [
         .target(
-            name: "libass",
+            name: "ass",
             dependencies: [
                 "Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"
             ]
@@ -21,27 +21,27 @@ let package = Package(
         .binaryTarget(
             name: "Libunibreak",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libunibreak.xcframework.zip",
-            checksum: "cc8b2577e5e91d9e4b53f4024f140405eba1cc900cbb1ca97cb1379efcc8384c"
+            checksum: "ba12736a6113e4a1473b94a101c34426579163e3ba187320acf0362b0d26e996"
         ),
         .binaryTarget(
             name: "Libfreetype",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libfreetype.xcframework.zip",
-            checksum: "0496e15adf4d7463d2123b87edd2ae472ec202ea56fe8ae26032eea1694d2608"
+            checksum: "d3364bd0943659ecfae6c2aff225083310a94513cf5b2a64e31b9b0e8892809e"
         ),
         .binaryTarget(
             name: "Libfribidi",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libfribidi.xcframework.zip",
-            checksum: "91fe4e1e4da17e443cba4a019bd75ac4395e09e0fe7a09685dc59e807455ef17"
+            checksum: "0d2d80092621cebc060cfd7d1b84b6be1a328b93396be563d6c4912e7080cb13"
         ),
         .binaryTarget(
             name: "Libharfbuzz",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libharfbuzz.xcframework.zip",
-            checksum: "dd14852b39ee76f2b31f54c64087d765ca334434be2758251848becb5c989a9b"
+            checksum: "09b7d8ea97761e2bdc0dfbb0302c679e18fbf7459e4794d225e9d344a6559cff"
         ),
         .binaryTarget(
             name: "Libass",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3/Libass.xcframework.zip",
-            checksum: "8e6340a19ea9845660214f764c987f557f928da610158ed20cde5e323b66641d"
+            checksum: "7b49714b2f6e35090638e6c1898b8fd544bac798dfcb866b2fe4507969fcaf45"
         )
     ]
 )
