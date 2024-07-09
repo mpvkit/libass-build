@@ -7,17 +7,10 @@ let package = Package(
     products: [
         .library(
             name: "libass",
-            type: .static,
-            targets: ["ass"]
+            targets: ["Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"]
         ),
     ],
     targets: [
-        .target(
-            name: "ass",
-            dependencies: [
-                "Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"
-            ]
-        ),
         .binaryTarget(
             name: "Libunibreak",
             url: "\(Libunibreak_url)",
