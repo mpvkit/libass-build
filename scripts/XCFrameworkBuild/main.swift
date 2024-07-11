@@ -5,9 +5,9 @@ do {
     try Build.performCommand(options)
 
     try BuildUnibreak().buildALL()
+    try BuildHarfbuzz().buildALL()
     try BuildFreetype().buildALL()
     try BuildFribidi().buildALL()
-    try BuildHarfbuzz().buildALL()
     try BuildASS().buildALL()
 } catch {
     print(error.localizedDescription)
@@ -93,7 +93,7 @@ private class BuildFreetype: BaseBuild {
     override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
         [
             "-Dzlib=enabled",
-            "-Dharfbuzz=disabled", 
+            "-Dharfbuzz=enabled", 
             "-Dbzip2=disabled", 
             "-Dmmap=disabled",
             "-Dpng=disabled",
