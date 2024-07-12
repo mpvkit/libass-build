@@ -1032,14 +1032,6 @@ enum Utility {
             if let logURL = logURL {
                 // print log when run in GitHub Action
                 if ProcessInfo.processInfo.environment.keys.contains("GITHUB_ACTION") {
-                    if FileManager.default.fileExists(atPath: "/Users/runner/work/libass-build/libass-build/dist/libfreetype/isimulator/scratch/arm64/meson-logs/meson-log.txt") {
-                        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-                        let mesonLogURL = URL(fileURLWithPath: "/Users/runner/work/libass-build/libass-build/dist/libfreetype/isimulator/scratch/arm64/meson-logs/meson-log.txt")
-                        if let content = String(data: try Data(contentsOf: mesonLogURL), encoding: .utf8) {
-                            print(content)
-                        }
-                        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-                    }
                     if let content = String(data: try Data(contentsOf: logURL), encoding: .utf8) {
                         print(content)
                     }
