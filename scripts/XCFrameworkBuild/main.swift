@@ -10,7 +10,7 @@ do {
     try BuildHarfbuzz().buildALL()
     try BuildASS().buildALL()
 } catch {
-    print(error.localizedDescription)
+    print("ERROR: \(error.localizedDescription)")
     exit(1)
 }
 
