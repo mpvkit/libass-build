@@ -23,11 +23,11 @@ enum Library: String, CaseIterable {
             return "libunibreak_6_1"
         case .libfreetype:
             // VER-2-10-1以上版本需要依赖libbrotli库，或指定--with-brotli=no
-            return "VER-2-13-2"
+            return "VER-2-12-1"
         case .libfribidi:
-            return "v1.0.15"
+            return "v1.0.12"
         case .libharfbuzz:
-            return "8.3.1"
+            return "8.1.1"
         case .libass:       // depend libunibreak libfreetype libfribidi libharfbuzz
             return "0.17.3"
         }
