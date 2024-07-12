@@ -52,16 +52,10 @@ class ArgumentOptions {
         let options = ArgumentOptions(arguments: Array(arguments.dropFirst()))
         for argument in arguments {
             switch argument {
-            case "debug=enable":
-                fallthrough
             case "enable-debug":
                 options.enableDebug = true
-            case "gpl=enable":
-                fallthrough
             case "enable-gpl":
                 options.enableGPL = true
-            case "split-platform=enable":
-                fallthrough
             case "enable-split-platform":
                 options.enableSplitPlatform = true
             default:
@@ -1044,6 +1038,7 @@ enum Utility {
                         if let content = String(data: try Data(contentsOf: mesonLogURL), encoding: .utf8) {
                             print(content)
                         }
+                        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
                     }
                     if let content = String(data: try Data(contentsOf: logURL), encoding: .utf8) {
                         print(content)
