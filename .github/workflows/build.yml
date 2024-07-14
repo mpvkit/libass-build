@@ -24,38 +24,19 @@ jobs:
         brew install meson
         brew install ninja
 
+    - name: Setup Xcode to support visionOS
+      run: |
+        sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+        xcodebuild -showsdks
+
     - name: Build
       run: |
-        make build
-        
+        make build version=${{ github.event.inputs.version }}
+    
     - name: Update Package.swift
       run: |
-        rm -f ./Package.swift
-        cp -f ./docs/Package.template.swift ./Package.swift
-        Libunibreak_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libunibreak.xcframework.zip"
-        Libunibreak_checksum=$(cat ./dist/release/Libunibreak.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libunibreak_url)#${Libunibreak_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libunibreak_checksum)#${Libunibreak_checksum}#g" ./Package.swift
-
-        Libfreetype_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libfreetype.xcframework.zip"
-        Libfreetype_checksum=$(cat ./dist/release/Libfreetype.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libfreetype_url)#${Libfreetype_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libfreetype_checksum)#${Libfreetype_checksum}#g" ./Package.swift
-
-        Libfribidi_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libfribidi.xcframework.zip"
-        Libfribidi_checksum=$(cat ./dist/release/Libfribidi.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libfribidi_url)#${Libfribidi_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libfribidi_checksum)#${Libfribidi_checksum}#g" ./Package.swift
-
-        Libharfbuzz_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libharfbuzz.xcframework.zip"
-        Libharfbuzz_checksum=$(cat ./dist/release/Libharfbuzz.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libharfbuzz_url)#${Libharfbuzz_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libharfbuzz_checksum)#${Libharfbuzz_checksum}#g" ./Package.swift
-
-        Libass_url="https://github.com/mpvkit/libass-build/releases/download/${{ github.event.inputs.version }}/Libass.xcframework.zip"
-        Libass_checksum=$(cat ./dist/release/Libass.xcframework.checksum.txt)
-        sed -i '' "s#\\\(Libass_url)#${Libass_url}#g" ./Package.swift
-        sed -i '' "s#\\\(Libass_checksum)#${Libass_checksum}#g" ./Package.swift
+        rm -rf ./Package.swift
+        cp -f ./dist/release/Package.swift ./Package.swift
 
     - name: Push Package.swift
       uses: EndBug/add-and-commit@v9
@@ -63,7 +44,7 @@ jobs:
         default_author: github_actions
         add: |
           - Package.swift
-        message: "chore: release version ${{ github.event.inputs.version }}"
+        message: "chore: bump version to ${{ github.event.inputs.version }}"
         push: "origin HEAD:${{ github.ref_name }}"
         
     - name: Upload binary to GitHub Release
@@ -74,5 +55,5 @@ jobs:
         files: |
           ./dist/release/*.txt
           ./dist/release/*.zip
-        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+        prerelease: ${{ contains(github.event.inputs.version, 'alpha') || contains(github.event.inputs.version, 'beta') }}
         fail_on_unmatched_files: true

@@ -8,34 +8,18 @@ let package = Package(
     products: [
         .library(
             name: "libass",
-            targets: ["Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"]
+            targets: ["_Libass"]
         ),
     ],
     targets: [
-        .binaryTarget(
-            name: "Libunibreak",
-            url: "\(Libunibreak_url)",
-            checksum: "\(Libunibreak_checksum)"
+        // Need a dummy target to embedded correctly.
+        // https://github.com/apple/swift-package-manager/issues/6069
+        .target(
+            name: "_Libass",
+            dependencies: ["Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"],
+            path: "Sources/_Dummy"
         ),
-        .binaryTarget(
-            name: "Libfreetype",
-            url: "\(Libfreetype_url)",
-            checksum: "\(Libfreetype_checksum)"
-        ),
-        .binaryTarget(
-            name: "Libfribidi",
-            url: "\(Libfribidi_url)",
-            checksum: "\(Libfribidi_checksum)"
-        ),
-        .binaryTarget(
-            name: "Libharfbuzz",
-            url: "\(Libharfbuzz_url)",
-            checksum: "\(Libharfbuzz_checksum)"
-        ),
-        .binaryTarget(
-            name: "Libass",
-            url: "\(Libass_url)",
-            checksum: "\(Libass_checksum)"
-        )
+        //AUTO_GENERATE_TARGETS_BEGIN//
+        //AUTO_GENERATE_TARGETS_END//
     ]
 )

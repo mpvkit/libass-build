@@ -47,6 +47,52 @@ enum Library: String, CaseIterable {
             return "https://github.com/libass/libass"
         }
     }
+
+    // for generate Package.swift
+    var targets : [PackageTarget] {
+        switch self {
+        case .libunibreak:
+            return  [
+                .target(
+                    name: "Libunibreak",
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.checksum.txt"
+                ),
+            ]
+        case .libfreetype:
+            return  [
+                .target(
+                    name: "Libfreetype",
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfreetype.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfreetype.xcframework.checksum.txt"
+                ),
+            ]
+        case .libfribidi:
+            return  [
+                .target(
+                    name: "Libfribidi",
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfribidi.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfribidi.xcframework.checksum.txt"
+                ),
+            ]
+        case .libharfbuzz:
+            return  [
+                .target(
+                    name: "Libharfbuzz",
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libharfbuzz.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libharfbuzz.xcframework.checksum.txt"
+                ),
+            ]
+        case .libass:
+            return  [
+                .target(
+                    name: "Libass",
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libass.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libass.xcframework.checksum.txt"
+                ),
+            ]
+        }
+    }
 }
 
 
