@@ -16,7 +16,7 @@ let package = Package(
         // https://github.com/apple/swift-package-manager/issues/6069
         .target(
             name: "_Libass",
-            dependencies: ["Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"],
+            dependencies: ["Libunibreak", "Libfontconfig", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"],
             path: "Sources/_Dummy"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
