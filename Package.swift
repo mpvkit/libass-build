@@ -16,45 +16,39 @@ let package = Package(
         // https://github.com/apple/swift-package-manager/issues/6069
         .target(
             name: "_Libass",
-            dependencies: ["Libunibreak", "Libfontconfig", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"],
+            dependencies: ["Libunibreak", "Libfreetype", "Libfribidi", "Libharfbuzz", "Libass"],
             path: "Sources/_Dummy"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
         .binaryTarget(
             name: "Libunibreak",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libunibreak.xcframework.zip",
-            checksum: "102fdcdc756079fe71cba64fa49c5da09e452b6a3cac57df18a4e38a08cd2cb7"
-        ),
-
-        .binaryTarget(
-            name: "Libfontconfig",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libfontconfig.xcframework.zip",
-            checksum: "3c38c2b9f1d9a67cbfd7d994e917ea711fb6280053bb35c6a0ba28332e334f05"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fix/Libunibreak.xcframework.zip",
+            checksum: "67e986aef17602de0be1cf051415ef54495ee989e31bb4ad9576759ee665643b"
         ),
 
         .binaryTarget(
             name: "Libfreetype",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libfreetype.xcframework.zip",
-            checksum: "926373425c1e129a90711de40499fc80bc200b8e8c6471fb7bdd3b9fe412a15d"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fix/Libfreetype.xcframework.zip",
+            checksum: "a880e21e387f08606aef61cac239b40d655a53224227dd585bcc638b276c9c75"
         ),
 
         .binaryTarget(
             name: "Libfribidi",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libfribidi.xcframework.zip",
-            checksum: "9a3f6657681cde03813395f2a16c04bf5d0aa1f2a37ee4fe2622446a42d1a6d3"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fix/Libfribidi.xcframework.zip",
+            checksum: "23b09b16f2edd36d1660e0e770df21ec4267524864fc15d36564d396065ff7cd"
         ),
 
         .binaryTarget(
             name: "Libharfbuzz",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libharfbuzz.xcframework.zip",
-            checksum: "1987214cad7836f74f43140900b19ffd4945833b4559f2f5e8a383c1d31c54ca"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fix/Libharfbuzz.xcframework.zip",
+            checksum: "fc9fd2e3a47061166ee96804ae77579a425d1329d8e4e6da19a8fb9ed88aabe4"
         ),
 
         .binaryTarget(
             name: "Libass",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fontconfig/Libass.xcframework.zip",
-            checksum: "f08791b5261a0a8388a6e30517dd89c2aefd8098493d5e23b5afd39c8f7cbfff"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fix/Libass.xcframework.zip",
+            checksum: "998311313178dd132a856b670c82ce0b337b46b4dd36f6f056cb05e8f9bfa7b1"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
