@@ -5,7 +5,6 @@ do {
     try Build.performCommand(options)
 
     try BuildUnibreak().buildALL()
-    try BuildFontconfig().buildALL()
     try BuildFreetype().buildALL()
     try BuildFribidi().buildALL()
     try BuildHarfbuzz().buildALL()
@@ -17,13 +16,11 @@ do {
 
 
 enum Library: String, CaseIterable {
-    case libunibreak, libfontconfig, libfreetype, libfribidi, libharfbuzz, libass
+    case libunibreak, libfreetype, libfribidi, libharfbuzz, libass
     var version: String {
         switch self {
         case .libunibreak:
             return "libunibreak_6_1"
-        case .libfontconfig:
-            return "2.14.2"
         case .libfreetype:
             // VER-2-10-1以上版本需要依赖libbrotli库，或指定--with-brotli=no
             return "VER-2-12-1"
@@ -40,8 +37,6 @@ enum Library: String, CaseIterable {
         switch self {
         case .libunibreak:
             return "https://github.com/adah1972/libunibreak"
-        case .libfontconfig:
-            return "https://gitlab.freedesktop.org/fontconfig/fontconfig"
         case .libfreetype:
             return "https://github.com/freetype/freetype"
         case .libfribidi:
@@ -62,14 +57,6 @@ enum Library: String, CaseIterable {
                     name: "Libunibreak",
                     url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.zip",
                     checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.checksum.txt"
-                ),
-            ]
-        case .libfontconfig:
-            return  [
-                .target(
-                    name: "Libfontconfig",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfontconfig.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfontconfig.xcframework.checksum.txt"
                 ),
             ]
         case .libfreetype:
@@ -117,11 +104,10 @@ private class BuildASS: BaseBuild {
     override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
         [
             "-Dlibunibreak=enabled",
-            "-Dcoretext=disabled",
-            "-Dfontconfig=enabled",
+            "-Dcoretext=enabled",
+            "-Dfontconfig=disabled",
             "-Ddirectwrite=disabled",
             "-Dasm=disabled",
-            "-Drequire-system-font-provider=false",
             "-Dtest=false",
             "-Dprofile=false",
         ]
@@ -141,32 +127,6 @@ private class BuildUnibreak: BaseBuild {
             "--disable-fast-install",
             "--disable-dependency-tracking",
             "--host=\(platform.host(arch: arch))",
-        ]
-    }
-}
-
-private class BuildFontconfig: BaseBuild {
-    init() {
-        super.init(library: .libfontconfig)
-    }
-
-    override func beforeBuild() throws {
-        try super.beforeBuild()
-
-        // disable autogen, use cmake to build
-        let path = directoryURL + "autogen.sh"
-        try? FileManager.default.removeItem(at: path)
-    }
-
-    override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
-        [
-            "-Ddoc=disabled",
-            "-Ddoc-txt=disabled",
-            "-Ddoc-man=disabled",
-            "-Ddoc-pdf=disabled",
-            "-Ddoc-html=disabled",
-            "-Dtests=disabled",
-            "-Dtools=disabled",
         ]
     }
 }
