@@ -1,0 +1,19 @@
+diff --git forkSrcPrefix/libass/ass_coretext.c forkDstPrefix/libass/ass_coretext.c
+index ba40ccab662bcaa79d246df4470b88d3cb833bfa..50030400566e85f073f49c535cabd0c3e285011a 100644
+--- forkSrcPrefix/libass/ass_coretext.c
++++ forkDstPrefix/libass/ass_coretext.c
+@@ -169,9 +169,11 @@ static void process_descriptors(ASS_FontProvider *provider, CFArrayRef fontsd)
+ 
+         char *path = NULL;
+         if (get_font_info_ct(fontd, &path, &meta)) {
+-            CFCharacterSetRef set =
+-                CTFontDescriptorCopyAttribute(fontd, kCTFontCharacterSetAttribute);
+-            ass_font_provider_add_font(provider, &meta, path, index, (void*)set);
++            if (path != NULL && strstr(path, "PrivateFrameworks") == NULL) {
++                CFCharacterSetRef set =
++                    CTFontDescriptorCopyAttribute(fontd, kCTFontCharacterSetAttribute);
++                ass_font_provider_add_font(provider, &meta, path, index, (void*)set);
++            }
+         }
+ 
+         free(meta.postscript_name);
