@@ -14,21 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout libass
+      - name: Checkout latest code
         uses: actions/checkout@v4
         with:
           repository: "libass/libass"
-          path: 'libass'
+          path: 'latest_code'
           fetch-depth: 0
 
       - name: Get latest verion
         id: version
         run: |
-          cd ./libass
-          latest_tag=$(git tag | grep n | grep -v "-" | sort -r | head -n 1)
+          cd ./latest_code
+          latest_tag=$(git tag | grep -v "-" | sort -r | head -n 1)
           echo "libass latest tag: $latest_tag"
           echo "LATEST_VERSION=$latest_tag" >> $GITHUB_ENV
-          rm -rf ../libass
+          rm -rf ../latest_code
 
       - name: update to new version
         uses: jannekem/run-python-script-action@v1
