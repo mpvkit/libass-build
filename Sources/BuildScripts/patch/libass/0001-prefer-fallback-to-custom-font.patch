@@ -1,0 +1,109 @@
+diff --git forkSrcPrefix/libass/ass_coretext.c forkDstPrefix/libass/ass_coretext.c
+index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..5513f3e80bb2f84bc0faa4e92bf60ef76b716728 100644
+--- forkSrcPrefix/libass/ass_coretext.c
++++ forkDstPrefix/libass/ass_coretext.c
+@@ -252,6 +252,84 @@ cleanup:
+     CFRelease(cfname);
+ }
+ 
++
++static bool is_private_font(CTFontRef fb)
++{
++    CTFontDescriptorRef fontd = CTFontCopyFontDescriptor(fb);
++    if (!fontd)
++        return false;
++
++    char *path = get_font_file(fontd);
++    CFRelease(fontd);
++    if (strstr(path, "PrivateFrameworks") == NULL) {
++        free(path);
++        return false;
++    }
++    
++    free(path);
++    return true;
++}
++
++static char *get_custom_font_fallback(ASS_Library *lib,
++                          CTFontRef fb, CFStringRef r)
++{
++    if (!is_private_font(fb))
++        return NULL;
++        
++
++    CFDictionaryRef attrs = CFDictionaryCreate(NULL, NULL, NULL, 0, NULL, NULL);
++    CTFontDescriptorRef descriptor = CTFontDescriptorCreateWithAttributes(attrs);
++    CFRelease(attrs);
++    CFArrayRef matches = CTFontDescriptorCreateMatchingFontDescriptors(descriptor, NULL);
++    CFRelease(descriptor);
++    if (!matches)
++        return NULL;
++
++    // TODO: check font fullname match first
++    for (int i = 0; i < CFArrayGetCount(matches); i++) {
++        // WARNING: element from array index no need to release, only release array
++        CTFontDescriptorRef fontDescriptor = CFArrayGetValueAtIndex(matches, i);
++        if (!fontDescriptor)
++            continue;
++        char *fontPath = get_font_file(fontDescriptor);
++        if (!fontPath)
++            continue;
++
++        // check is bundle embed font
++        if (strstr(fontPath, ".app") == NULL) {
++            free(fontPath);
++            continue;
++        }
++        free(fontPath);
++
++        CTFontRef fontF = CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL);
++        CTFontRef fbF = CTFontCreateForString(fontF, r, CFRangeMake(0, 1));
++        CFRelease(fontF);
++        if (fbF) {
++            // custom font may fallback to default font, check private again
++            if (is_private_font(fbF)) {
++                CFRelease(fbF);
++                continue;
++            }
++
++            CFStringRef cffamily = CTFontCopyFamilyName(fbF);
++            CFRelease(fbF);
++            if (!cffamily) {
++                continue;
++            }
++
++            char *res_family = cfstr2buf(cffamily);
++            CFRelease(cffamily);
++
++            CFRelease(matches);
++            return res_family;
++        } 
++    }
++
++    CFRelease(matches);
++    return NULL;
++}
++
+ static char *get_fallback(void *priv, ASS_Library *lib,
+                           const char *family, uint32_t codepoint)
+ {
+@@ -277,10 +355,18 @@ static char *get_fallback(void *priv, ASS_Library *lib,
+ 
+     CTFontRef fb = CTFontCreateForString(font, r, CFRangeMake(0, 1));
+     CFRelease(font);
+-    CFRelease(r);
++    // CFRelease(r);
+     if (!fb)
+         return NULL;
+ 
++    // Fallback to custom font in the app bundle
++    char *custom_family = get_custom_font_fallback(lib, fb, r);
++    CFRelease(r);
++    if (custom_family) {
++        CFRelease(fb);
++        return custom_family;
++    }
++
+     CFStringRef cffamily = CTFontCopyFamilyName(fb);
+     CFRelease(fb);
+     if (!cffamily)
