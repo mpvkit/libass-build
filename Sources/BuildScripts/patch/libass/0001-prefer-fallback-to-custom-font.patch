@@ -1,5 +1,5 @@
 diff --git forkSrcPrefix/libass/ass_coretext.c forkDstPrefix/libass/ass_coretext.c
-index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..2b360097720d840301eaeae244149b27ffe43ade 100644
+index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..f0de79eef7530c25feb511589b46881622b1fdd5 100644
 --- forkSrcPrefix/libass/ass_coretext.c
 +++ forkDstPrefix/libass/ass_coretext.c
 @@ -51,18 +51,22 @@ static char *cfstr2buf(CFStringRef string)
@@ -31,41 +31,28 @@ index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..2b360097720d840301eaeae244149b27
  }
  
  static void destroy_font(void *priv)
-@@ -130,6 +134,29 @@ static char *get_name(CTFontDescriptorRef fontd, CFStringRef attr)
+@@ -130,6 +134,17 @@ static char *get_name(CTFontDescriptorRef fontd, CFStringRef attr)
      return ret;
  }
  
-+static char *get_display_name(CTFontRef fb)
++static char *get_localized_name(CTFontDescriptorRef fontd, CFStringRef attr)
 +{
-+    CFStringRef name = CTFontCopyDisplayName(fb);
-+    if (name && CFStringGetLength(name) > 0) {
-+        char *ret = cfstr2buf(name);
++    char *ret = NULL;
++    CFStringRef name = CTFontDescriptorCopyLocalizedAttribute(fontd, attr, NULL);
++    if (name) {
++        ret = cfstr2buf(name);
 +        CFRelease(name);
-+        return ret;
 +    }
-+    if (name)
-+        CFRelease(name);
-+
-+    name = CTFontCopyPostScriptName(fb);
-+    if (name && CFStringGetLength(name) > 0) {
-+        char *ret = cfstr2buf(name);
-+        CFRelease(name);
-+        return ret;
-+    }
-+    if (name)
-+        CFRelease(name);
-+
-+    return NULL;
++    return ret;
 +}
 +
  static bool get_font_info_ct(CTFontDescriptorRef fontd,
                               char **path_out,
                               ASS_FontProviderMetaData *info)
-@@ -252,6 +279,122 @@ cleanup:
+@@ -252,6 +267,118 @@ cleanup:
      CFRelease(cfname);
  }
  
-+
 +static bool is_private_font(CTFontRef fb)
 +{
 +    CTFontDescriptorRef fontd = CTFontCopyFontDescriptor(fb);
@@ -82,7 +69,6 @@ index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..2b360097720d840301eaeae244149b27
 +    free(path);
 +    return true;
 +}
-+
 +
 +static char *get_custom_font_fallback(ASS_Library *lib,
 +                          CTFontRef fb, const char *family, CFStringRef r)
@@ -104,20 +90,18 @@ index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..2b360097720d840301eaeae244149b27
 +        if (!fontDescriptor)
 +            continue;
 +
-+        CTFontRef fontF = CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL);
-+        char *display_name = get_display_name(fontF);
++        char *display_name = get_localized_name(fontDescriptor, kCTFontDisplayNameAttribute);
 +        if (!display_name) {
-+            CFRelease(fontF);
 +            continue;
 +        }
 +
 +        if (strstr(display_name, family) == NULL) {
 +            free(display_name);
-+            CFRelease(fontF);
 +            continue;
 +        }
 +        free(display_name);
 +
++        CTFontRef fontF = CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL);
 +        CTFontRef fbF = CTFontCreateForString(fontF, r, CFRangeMake(0, 1));
 +        CFRelease(fontF);
 +        if (fbF) {
@@ -184,7 +168,7 @@ index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..2b360097720d840301eaeae244149b27
  static char *get_fallback(void *priv, ASS_Library *lib,
                            const char *family, uint32_t codepoint)
  {
-@@ -277,10 +420,18 @@ static char *get_fallback(void *priv, ASS_Library *lib,
+@@ -277,10 +404,18 @@ static char *get_fallback(void *priv, ASS_Library *lib,
  
      CTFontRef fb = CTFontCreateForString(font, r, CFRangeMake(0, 1));
      CFRelease(font);
