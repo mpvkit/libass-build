@@ -1,5 +1,5 @@
 diff --git forkSrcPrefix/libass/ass_coretext.c forkDstPrefix/libass/ass_coretext.c
-index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..f0de79eef7530c25feb511589b46881622b1fdd5 100644
+index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..ecd75c5c2578d4a800b7b5b08af9ccc00927e988 100644
 --- forkSrcPrefix/libass/ass_coretext.c
 +++ forkDstPrefix/libass/ass_coretext.c
 @@ -51,18 +51,22 @@ static char *cfstr2buf(CFStringRef string)
@@ -90,16 +90,16 @@ index 46cbfcf12fc9f0f2e677194cc79b9a1cd1617240..f0de79eef7530c25feb511589b468816
 +        if (!fontDescriptor)
 +            continue;
 +
-+        char *display_name = get_localized_name(fontDescriptor, kCTFontDisplayNameAttribute);
-+        if (!display_name) {
++        char *localized_family_name = get_localized_name(fontDescriptor, kCTFontFamilyNameAttribute);
++        if (!localized_family_name) {
 +            continue;
 +        }
 +
-+        if (strstr(display_name, family) == NULL) {
-+            free(display_name);
++        if (strstr(localized_family_name, family) == NULL) {
++            free(localized_family_name);
 +            continue;
 +        }
-+        free(display_name);
++        free(localized_family_name);
 +
 +        CTFontRef fontF = CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL);
 +        CTFontRef fbF = CTFontCreateForString(fontF, r, CFRangeMake(0, 1));
