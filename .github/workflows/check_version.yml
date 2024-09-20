@@ -3,7 +3,7 @@ name: Check new version
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '0 0 1 * *' # every month first day
 
 jobs:
   build:
@@ -26,7 +26,7 @@ jobs:
         run: |
           cd ./latest_code
           latest_tag=$(git tag --sort=-v:refname | grep -v "-" | head -n 1)
-          echo "libass latest tag: $latest_tag"
+          echo "latest tag: $latest_tag"
           echo "LATEST_VERSION=$latest_tag" >> $GITHUB_ENV
           rm -rf ../latest_code
 
@@ -45,9 +45,9 @@ jobs:
             with open(file_path, 'r', encoding='utf-8') as file:
               content = file.read()
             oldVersion = re.search(r'(case .libass[^"]+?)"(.+?)"', content).group(2)
-            print("libass old version:", oldVersion)
+            print("old version:", oldVersion)
             newVersion = '${{ env.LATEST_VERSION }}'
-            print("libass new version:", newVersion)
+            print("new version:", newVersion)
             if parse_version(newVersion) > parse_version(oldVersion):
               content = re.sub(r'(case .libass[^"]+?)"(.+?)"', r'\1"${{ env.LATEST_VERSION }}"', content, count=1)
               set_env('FOUND_NEW_VERSION', '1')
