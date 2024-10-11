@@ -24,31 +24,31 @@ let package = Package(
         .binaryTarget(
             name: "Libunibreak",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fallback/Libunibreak.xcframework.zip",
-            checksum: "7929cbc34334deae3fa59525aa5ac7afa431d8f244cf24e4ec8ab36432ac3b6c"
+            checksum: "d0a589e5a626a3d53725cd1eb43b1d0c82e28f74b33478ad607410d9654b6e8b"
         ),
 
         .binaryTarget(
             name: "Libfreetype",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fallback/Libfreetype.xcframework.zip",
-            checksum: "bd69f005d9ebbab64f17a8853cf99a151d731bbd86e1130d9e9f43247002fb05"
+            checksum: "1df64341ffc3e87c259b46786c407d3f1ac4222ad2371e20547a07062a9e06ef"
         ),
 
         .binaryTarget(
             name: "Libfribidi",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fallback/Libfribidi.xcframework.zip",
-            checksum: "74ae56f42ec69f0261a630ac9a5b0ab730e8b693d37d277e6a783aa39061f7ba"
+            checksum: "2a69904b636852a5ea677239df29a76fbee9d16528e071c56fa15c383f02ee90"
         ),
 
         .binaryTarget(
             name: "Libharfbuzz",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fallback/Libharfbuzz.xcframework.zip",
-            checksum: "f9f30c64eb3687a85addaf45c2da88672615ce31916d3512bc5508e5f7f32e09"
+            checksum: "6a976ca68967aec4bb258dadc1d42a993977915e7ee9906170d6e3b3fd1bbd3c"
         ),
 
         .binaryTarget(
             name: "Libass",
             url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-fallback/Libass.xcframework.zip",
-            checksum: "90256d6e413aa13b932101f80082a73397f9a46bd819078705b1e916525a1411"
+            checksum: "1d2a2eb29c1174f011cb2bc0b52cc592297c2bc14a24d591a4a2b736df27b2e3"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
