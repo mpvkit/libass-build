@@ -23,32 +23,32 @@ let package = Package(
 
         .binaryTarget(
             name: "Libunibreak",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode26/Libunibreak.xcframework.zip",
-            checksum: "e8044ef4400c0ae467619392b72a2a4cc26764fae68928ca5be8ef6e517209b2"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode/Libunibreak.xcframework.zip",
+            checksum: "8544734d5893efec6b89e059bf557dc0508740c11f918d695c2e903fae54b491"
         ),
 
         .binaryTarget(
             name: "Libfreetype",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode26/Libfreetype.xcframework.zip",
-            checksum: "f4e869424023d3a02848e6d7137efa771ead4a03d56467e8161ec09e67c7c8ee"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode/Libfreetype.xcframework.zip",
+            checksum: "13733a7476563538961f5bb4b16a1dfc33ad5d6380624732b49dcd99fc2f1233"
         ),
 
         .binaryTarget(
             name: "Libfribidi",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode26/Libfribidi.xcframework.zip",
-            checksum: "6adff94fa27b362c9664eedd0d5a663576e84338e2ffae3f3c666ccb64c22717"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode/Libfribidi.xcframework.zip",
+            checksum: "331ac84defb994b3a6148277090b4675b911fa70b8e5a0a2c521b5250de339d9"
         ),
 
         .binaryTarget(
             name: "Libharfbuzz",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode26/Libharfbuzz.xcframework.zip",
-            checksum: "83df7792bb7ed6deac8041d42930bc87b90203690cf63cb1da2dc23bad044760"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode/Libharfbuzz.xcframework.zip",
+            checksum: "f3ded3d4040661f5c92539eea2798a984e3d6f3da5bce7e12f41c6d43595026c"
         ),
 
         .binaryTarget(
             name: "Libass",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode26/Libass.xcframework.zip",
-            checksum: "c07c0cad36b2851935255eaa60b148ffdeb8c7ff2d66c7ff3c908563be0aae27"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.3-xcode/Libass.xcframework.zip",
+            checksum: "374f49021908f92d832a4aed05c52deff7ffe0f9308be42bb2711fd3c8b4430d"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
