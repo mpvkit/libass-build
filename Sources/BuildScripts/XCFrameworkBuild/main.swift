@@ -29,7 +29,7 @@ enum Library: String, CaseIterable {
         case .libharfbuzz:
             return "8.1.1"
         case .libass:       // depend libunibreak libfreetype libfribidi libharfbuzz
-            return "0.17.3"
+            return "0.17.4"
         }
     }
 
