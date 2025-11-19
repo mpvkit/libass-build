@@ -108,8 +108,11 @@ private class BuildASS: BaseBuild {
             "-Dfontconfig=disabled",
             "-Ddirectwrite=disabled",
             "-Dasm=disabled",
-            "-Dtest=false",
-            "-Dprofile=false",
+            "-Dcheckasm=disabled",
+            "-Dtest=disabled",
+            "-Dprofile=disabled",
+            "-Dcompare=disabled",
+            "-Dfuzz=disabled",
         ]
     }
 }
