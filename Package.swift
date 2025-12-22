@@ -23,32 +23,32 @@ let package = Package(
 
         .binaryTarget(
             name: "Libunibreak",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4/Libunibreak.xcframework.zip",
-            checksum: "001087c0e927ae00f604422b539898b81eb77230ea7700597b70393cd51e946c"
-        ),
-
-        .binaryTarget(
-            name: "Libfreetype",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4/Libfreetype.xcframework.zip",
-            checksum: "f2840aba1ce35e51c0595557eee82c908dac8e32108ecc0661301c06061e051c"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4-hvgl/Libunibreak.xcframework.zip",
+            checksum: "537ad68d5299f7cb1aac0b1688bc50ce8dd0f49e6576d7ba5ac832569a54e760"
         ),
 
         .binaryTarget(
             name: "Libfribidi",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4/Libfribidi.xcframework.zip",
-            checksum: "4a55513792ef7a17893875f74cc84c56f3657e8768c07a7a96f563a11dc4b743"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4-hvgl/Libfribidi.xcframework.zip",
+            checksum: "0c2dea1162f8951a96ecaf1a5736f021da6e6839afdb16e786c1cdb94be59f68"
+        ),
+
+        .binaryTarget(
+            name: "Libfreetype",
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4-hvgl/Libfreetype.xcframework.zip",
+            checksum: "99b3cd39bf0a62ca17b7597c93af1eb507a681680a0b888d797d33dbe2d14cb1"
         ),
 
         .binaryTarget(
             name: "Libharfbuzz",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4/Libharfbuzz.xcframework.zip",
-            checksum: "91558d8497d9d97bc11eeef8b744d104315893bfee8f17483d8002e14565f84b"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4-hvgl/Libharfbuzz.xcframework.zip",
+            checksum: "3c587e1303c2248654afc6b84a9c667c549e5d5bad13844638866f62789a586f"
         ),
 
         .binaryTarget(
             name: "Libass",
-            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4/Libass.xcframework.zip",
-            checksum: "1e41f5a69c74f6c6407aab84a65ccd0b34e73fa44465f488f99bf22bd61b070d"
+            url: "https://github.com/mpvkit/libass-build/releases/download/0.17.4-hvgl/Libass.xcframework.zip",
+            checksum: "0422d057760230fd137e2a06f6f6f1ee8babe1cdd061cbdae196e951ed45fcaf"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
