@@ -5,8 +5,8 @@ do {
     try Build.performCommand(options)
 
     try BuildUnibreak().buildALL()
-    try BuildFreetype().buildALL()
     try BuildFribidi().buildALL()
+    try BuildFreetype().buildALL()
     try BuildHarfbuzz().buildALL()
     try BuildASS().buildALL()
 } catch {
@@ -21,13 +21,13 @@ enum Library: String, CaseIterable {
         switch self {
         case .libunibreak:
             return "libunibreak_6_1"
-        case .libfreetype:
-            // VER-2-10-1以上版本需要依赖libbrotli库，或指定--with-brotli=no
-            return "VER-2-12-1"
         case .libfribidi:
             return "v1.0.12"
+        case .libfreetype:
+            // VER-2-10-1以上版本需要依赖libbrotli库，或指定--with-brotli=no
+            return "VER-2-14-1"
         case .libharfbuzz:
-            return "8.1.1"
+            return "11.5.1"
         case .libass:       // depend libunibreak libfreetype libfribidi libharfbuzz
             return "0.17.4"
         }
@@ -37,10 +37,10 @@ enum Library: String, CaseIterable {
         switch self {
         case .libunibreak:
             return "https://github.com/adah1972/libunibreak"
-        case .libfreetype:
-            return "https://github.com/freetype/freetype"
         case .libfribidi:
             return "https://github.com/fribidi/fribidi"
+        case .libfreetype:
+            return "https://github.com/freetype/freetype"
         case .libharfbuzz:
             return "https://github.com/harfbuzz/harfbuzz"
         case .libass:
@@ -141,6 +141,7 @@ private class BuildFreetype: BaseBuild {
 
     override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
         [
+            "-Dhvf=enabled",
             "-Dzlib=enabled",
             "-Dharfbuzz=disabled", 
             "-Dbzip2=disabled", 

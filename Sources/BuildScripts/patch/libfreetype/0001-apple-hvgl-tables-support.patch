@@ -1,0 +1,2442 @@
+From 7e39a1759468ad1e01b746577fc8c9b32afd280e Mon Sep 17 00:00:00 2001
+From: Debbie Goldsmith <goldsmit@apple.com>
+Date: Mon, 17 Nov 2025 19:24:21 +0100
+Subject: [PATCH 1/2] [macOS] Use Apple's HVF library to render fonts with
+ 'hvgl' tables
+
+---
+ CMakeLists.txt                                |  46 ++
+ builds/unix/configure.raw                     |  46 +-
+ devel/ftoption.h                              |  16 +
+ include/freetype/config/ftmodule.h            |   1 +
+ include/freetype/config/ftoption.h            |  16 +
+ include/freetype/internal/fttrace.h           |   5 +
+ include/freetype/internal/services/svfntfmt.h |   1 +
+ include/freetype/tttags.h                     |   2 +
+ meson.build                                   |  30 +
+ meson_options.txt                             |   5 +
+ modules.cfg                                   |   6 +
+ src/hvf/hvf.c                                 |  25 +
+ src/hvf/hvfdrv.c                              | 633 ++++++++++++++++++
+ src/hvf/hvfdrv.h                              |  38 ++
+ src/hvf/hvferror.h                            |  40 ++
+ src/hvf/hvfload.c                             | 449 +++++++++++++
+ src/hvf/hvfload.h                             |  39 ++
+ src/hvf/hvfobjs.c                             | 425 ++++++++++++
+ src/hvf/hvfobjs.h                             | 139 ++++
+ src/hvf/module.mk                             |  22 +
+ src/hvf/rules.mk                              |  66 ++
+ src/sfnt/sfobjs.c                             |   1 +
+ src/truetype/ttobjs.c                         |   3 +
+ 23 files changed, 2053 insertions(+), 1 deletion(-)
+ create mode 100644 src/hvf/hvf.c
+ create mode 100644 src/hvf/hvfdrv.c
+ create mode 100644 src/hvf/hvfdrv.h
+ create mode 100644 src/hvf/hvferror.h
+ create mode 100644 src/hvf/hvfload.c
+ create mode 100644 src/hvf/hvfload.h
+ create mode 100644 src/hvf/hvfobjs.c
+ create mode 100644 src/hvf/hvfobjs.h
+ create mode 100644 src/hvf/module.mk
+ create mode 100644 src/hvf/rules.mk
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ce70f6b5e..f6651fd27 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -215,6 +215,9 @@ cmake_dependent_option(FT_REQUIRE_BROTLI
+   "Require support of compressed WOFF2 fonts." OFF
+   "NOT FT_DISABLE_BROTLI" OFF)
+ 
++option(FT_DISABLE_HVF
++  "Disable support of HVF vector fonts." OFF)
++
+ option(FT_ENABLE_ERROR_STRINGS
+   "Enable support for meaningful error descriptions." OFF)
+ 
+@@ -322,6 +325,36 @@ if (NOT FT_DISABLE_BROTLI)
+   endif ()
+ endif ()
+ 
++if (NOT FT_DISABLE_HVF)
++  if (APPLE)
++    # Check for HVF header
++    check_include_file("hvf/Scaler.h" HAVE_HVF_HEADER)
++
++    if (HAVE_HVF_HEADER)
++      # Find the HVF library
++      find_library(HVF_LIBRARY NAMES hvf)
++      if (HVF_LIBRARY)
++        set(HVF_FOUND TRUE)
++
++        # Apple platforms: Enable runtime availability checking
++        if (CMAKE_C_COMPILER_ID MATCHES "Clang")
++          set(HVF_RUNTIME_AVAILABLE TRUE)
++          message(STATUS "Found HVF: Apple platform with clang and HVF SDK")
++        else()
++          message(STATUS "Found HVF: Apple platform (clang recommended for __builtin_available syntax)")
++        endif()
++      else()
++        set(HVF_FOUND FALSE)
++      endif()
++    else()
++      set(HVF_FOUND FALSE)
++    endif()
++  else()
++    # HVF is not supported
++    set(HVF_FOUND FALSE)
++  endif()
++endif()
++
+ # Create the configuration file
+ if (UNIX AND NOT WIN32)
+   check_include_file("unistd.h" HAVE_UNISTD_H)
+@@ -388,6 +421,11 @@ if (BROTLIDEC_FOUND)
+     "/\\* +(#define +FT_CONFIG_OPTION_USE_BROTLI) +\\*/" "\\1"
+     FTOPTION_H "${FTOPTION_H}")
+ endif ()
++if (HVF_FOUND)
++  string(REGEX REPLACE
++    "/\\* +(#define +FT_CONFIG_OPTION_HVF) +\\*/" "\\1"
++    FTOPTION_H "${FTOPTION_H}")
++endif ()
+ 
+ if (FT_ENABLE_ERROR_STRINGS)
+   string(REGEX REPLACE
+@@ -437,6 +475,7 @@ set(BASE_SRCS
+   src/cff/cff.c
+   src/cid/type1cid.c
+   src/gzip/ftgzip.c
++  src/hvf/hvf.c
+   src/lzw/ftlzw.c
+   src/pcf/pcf.c
+   src/pfr/pfr.c
+@@ -505,6 +544,10 @@ else ()
+     C_VISIBILITY_PRESET hidden)
+ endif ()
+ 
++if (HVF_RUNTIME_AVAILABLE)
++  target_compile_definitions(freetype PRIVATE HVF_RUNTIME_AVAILABLE=1)
++endif ()
++
+ if (BUILD_SHARED_LIBS)
+   set_target_properties(freetype PROPERTIES
+     VERSION ${LIBRARY_VERSION}
+@@ -582,6 +625,9 @@ if (BROTLIDEC_FOUND)
+   target_include_directories(freetype PRIVATE ${BROTLIDEC_INCLUDE_DIRS})
+   list(APPEND PKGCONFIG_REQUIRES_PRIVATE "libbrotlidec")
+ endif ()
++if (HVF_FOUND)
++  target_link_libraries(freetype PRIVATE ${HVF_LIBRARY})
++endif ()
+ 
+ 
+ # Installation
+diff --git a/builds/unix/configure.raw b/builds/unix/configure.raw
+index 45a9be6e4..3953b2d94 100644
+--- a/builds/unix/configure.raw
++++ b/builds/unix/configure.raw
+@@ -556,6 +556,39 @@ if test x"$with_brotli" = xyes -a "$have_brotli" = no; then
+   AC_MSG_ERROR([brotli support requested but library not found])
+ fi
+ 
++# check for HVF support
++
++# HVF support detection with platform-specific handling
++case "$host" in
++  *-apple-darwin*|*-apple-macos*)
++    # Apple platforms: Check for HVF headers in SDK (available macOS 15.4+, iOS 18.4+)
++    AC_CHECK_HEADER([hvf/Scaler.h], [
++      # Check if we're using clang for runtime availability checking
++      if test "x$GCC" = "xyes" && $CC --version | grep -q "clang"; then
++        # Enable HVF runtime availability checking
++        CFLAGS="$CFLAGS -DHVF_RUNTIME_AVAILABLE=1"
++        have_hvf="yes (Apple platform with clang and HVF SDK)"
++      else
++        # Allow building without runtime availability checking
++        have_hvf="yes (Apple platform with HVF SDK, no runtime checking)"
++      fi
++      # Add dylib linkage for HVF (it's a dylib, not a framework)
++      hvf_libspriv="-lhvf"
++      hvf_libsstaticconf="$hvf_libspriv"
++      HVF_CFLAGS=""
++      HVF_LIBS="$hvf_libspriv"
++    ], [
++      have_hvf="no"
++    ])
++    ;;
++  *)
++    have_hvf="no"
++    hvf_reqpriv=
++    hvf_libspriv=
++    hvf_libsstaticconf=
++    ;;
++esac
++
+ 
+ # Checks for the demo programs.
+ #
+@@ -1044,7 +1077,8 @@ PKGCONFIG_REQUIRES_PRIVATE="$zlib_reqpriv,     \
+                             $bzip2_reqpriv,    \
+                             $libpng_reqpriv,   \
+                             $harfbuzz_reqpriv, \
+-                            $brotli_reqpriv"
++                            $brotli_reqpriv,   \
++                            $hvf_reqpriv"
+ # beautify
+ PKGCONFIG_REQUIRES_PRIVATE=`echo "$PKGCONFIG_REQUIRES_PRIVATE" \
+                             | sed -e 's/^  *//'      \
+@@ -1060,6 +1094,7 @@ PKGCONFIG_LIBS_PRIVATE="$zlib_libspriv     \
+                         $libpng_libspriv   \
+                         $harfbuzz_libspriv \
+                         $brotli_libspriv   \
++                        $hvf_libspriv      \
+                         $ft2_extra_libs"
+ # beautify
+ PKGCONFIG_LIBS_PRIVATE=`echo "$PKGCONFIG_LIBS_PRIVATE"  \
+@@ -1073,6 +1108,7 @@ LIBSSTATIC_CONFIG="-lfreetype               \
+                    $libpng_libsstaticconf   \
+                    $harfbuzz_libsstaticconf \
+                    $brotli_libsstaticconf   \
++                   $hvf_libsstaticconf      \
+                    $ft2_extra_libs"
+ # remove -L/usr/lib and -L/usr/lib64 since `freetype-config' adds them later
+ # on if necessary; also beautify
+@@ -1172,6 +1208,13 @@ if test "$have_brotli" != no; then
+ else
+   ftoption_unset FT_CONFIG_OPTION_USE_BROTLI
+ fi
++if test "$have_hvf" != no; then
++  CFLAGS="$CFLAGS $HVF_CFLAGS"
++  LDFLAGS="$LDFLAGS $HVF_LIBS"
++  ftoption_set FT_CONFIG_OPTION_HVF
++else
++  ftoption_unset FT_CONFIG_OPTION_HVF
++fi
+ 
+ if test "$have_pthread" != no; then
+   CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+@@ -1212,6 +1255,7 @@ Library configuration:
+   libpng:        $have_libpng
+   harfbuzz:      $have_harfbuzz
+   brotli:        $have_brotli
++  hvf:           $have_hvf
+   pthread:       $have_pthread
+ ])
+ 
+diff --git a/devel/ftoption.h b/devel/ftoption.h
+index 1d4ad342b..11f612d56 100644
+--- a/devel/ftoption.h
++++ b/devel/ftoption.h
+@@ -318,6 +318,22 @@ FT_BEGIN_HEADER
+ #define FT_CONFIG_OPTION_USE_HARFBUZZ_DYNAMIC
+ 
+ 
++  /**************************************************************************
++   *
++   * HVF support.
++   *
++   *   FreeType can use Apple's HVF (Hierarchical Variable Font) library
++   *   to render glyphs from fonts containing 'hvgl' tables.
++   *
++   *   Define this macro if you want to enable this 'feature'.
++   *
++   *   If you use a build system like cmake or the `configure` script,
++   *   options set by those programs have precedence, overwriting the value
++   *   here with the configured one.
++   */
++/* #define FT_CONFIG_OPTION_HVF */
++
++
+   /**************************************************************************
+    *
+    * Brotli support.
+diff --git a/include/freetype/config/ftmodule.h b/include/freetype/config/ftmodule.h
+index b315baba8..028e52cc3 100644
+--- a/include/freetype/config/ftmodule.h
++++ b/include/freetype/config/ftmodule.h
+@@ -15,6 +15,7 @@ FT_USE_MODULE( FT_Driver_ClassRec, tt_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, t1_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, cff_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, t1cid_driver_class )
++FT_USE_MODULE( FT_Driver_ClassRec, hvf_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, pfr_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, t42_driver_class )
+ FT_USE_MODULE( FT_Driver_ClassRec, winfnt_driver_class )
+diff --git a/include/freetype/config/ftoption.h b/include/freetype/config/ftoption.h
+index fadfb9187..7e6bca873 100644
+--- a/include/freetype/config/ftoption.h
++++ b/include/freetype/config/ftoption.h
+@@ -334,6 +334,22 @@ FT_BEGIN_HEADER
+ /* #define FT_CONFIG_OPTION_USE_BROTLI */
+ 
+ 
++  /**************************************************************************
++   *
++   * HVF support.
++   *
++   *   FreeType can use Apple's HVF (Hierarchical Variable Font) library
++   *   to render glyphs from fonts containing 'hvgl' tables.
++   *
++   *   Define this macro if you want to enable this 'feature'.
++   *
++   *   If you use a build system like cmake or the `configure` script,
++   *   options set by those programs have precedence, overwriting the value
++   *   here with the configured one.
++   */
++/* #define FT_CONFIG_OPTION_HVF */
++
++
+   /**************************************************************************
+    *
+    * Glyph Postscript Names handling
+diff --git a/include/freetype/internal/fttrace.h b/include/freetype/internal/fttrace.h
+index 3fd592800..8dfaed350 100644
+--- a/include/freetype/internal/fttrace.h
++++ b/include/freetype/internal/fttrace.h
+@@ -120,6 +120,11 @@ FT_TRACE_DEF( cidload )
+ FT_TRACE_DEF( cidobjs )
+ FT_TRACE_DEF( cidparse )
+ 
++  /* HVF driver component */
++FT_TRACE_DEF( hvfdrv )
++FT_TRACE_DEF( hvfobjs )
++FT_TRACE_DEF( hvfload )
++
+   /* Windows font component */
+ FT_TRACE_DEF( winfnt )
+ 
+diff --git a/include/freetype/internal/services/svfntfmt.h b/include/freetype/internal/services/svfntfmt.h
+index 690fdc2a2..a6c4c5564 100644
+--- a/include/freetype/internal/services/svfntfmt.h
++++ b/include/freetype/internal/services/svfntfmt.h
+@@ -40,6 +40,7 @@ FT_BEGIN_HEADER
+ #define FT_FONT_FORMAT_TYPE_42   "Type 42"
+ #define FT_FONT_FORMAT_CID       "CID Type 1"
+ #define FT_FONT_FORMAT_CFF       "CFF"
++#define FT_FONT_FORMAT_HVF       "HVF"
+ #define FT_FONT_FORMAT_PFR       "PFR"
+ #define FT_FONT_FORMAT_WINFNT    "Windows FNT"
+ 
+diff --git a/include/freetype/tttags.h b/include/freetype/tttags.h
+index 56bb0a3ee..c66784eeb 100644
+--- a/include/freetype/tttags.h
++++ b/include/freetype/tttags.h
+@@ -64,6 +64,8 @@ FT_BEGIN_HEADER
+ #define TTAG_GSUB  FT_MAKE_TAG( 'G', 'S', 'U', 'B' )
+ #define TTAG_gvar  FT_MAKE_TAG( 'g', 'v', 'a', 'r' )
+ #define TTAG_HVAR  FT_MAKE_TAG( 'H', 'V', 'A', 'R' )
++#define TTAG_hvgl  FT_MAKE_TAG( 'h', 'v', 'g', 'l' )
++#define TTAG_hvpm  FT_MAKE_TAG( 'h', 'v', 'p', 'm' )
+ #define TTAG_hdmx  FT_MAKE_TAG( 'h', 'd', 'm', 'x' )
+ #define TTAG_head  FT_MAKE_TAG( 'h', 'e', 'a', 'd' )
+ #define TTAG_hhea  FT_MAKE_TAG( 'h', 'h', 'e', 'a' )
+diff --git a/meson.build b/meson.build
+index 09382fbef..76c02817c 100644
+--- a/meson.build
++++ b/meson.build
+@@ -401,6 +401,35 @@ if brotli_dep.found()
+   ft2_deps += [brotli_dep]
+ endif
+ 
++# HVF support (Apple platforms only)
++hvf_dep = disabler()
++hvf_found = false
++
++if not get_option('hvf').disabled()
++  if host_machine.system() == 'darwin'
++    # Check for HVF header availability
++    if cc.has_header('hvf/Scaler.h')
++      # Find the HVF library
++      hvf_dep = cc.find_library('hvf', required: get_option('hvf'))
++
++      if hvf_dep.found()
++        hvf_found = true
++        ftoption_command += ['--enable=FT_CONFIG_OPTION_HVF']
++        ft2_deps += [hvf_dep]
++
++        # Check for Clang compiler for runtime availability support
++        if cc.get_id() == 'clang'
++          ft2_defines += ['-DHVF_RUNTIME_AVAILABLE=1']
++        endif
++      endif
++    elif get_option('hvf').enabled()
++      error('HVF support was enabled but hvf/Scaler.h header was not found')
++    endif
++  elif get_option('hvf').enabled()
++    error('HVF support is only available on Apple platforms (macOS/iOS)')
++  endif
++endif
++
+ if get_option('error_strings')
+   ftoption_command += ['--enable=FT_CONFIG_OPTION_ERROR_STRINGS']
+ endif
+@@ -524,6 +553,7 @@ summary({'Zlib': zlib_option,
+          'Png': libpng_dep.found(),
+          'HarfBuzz': harfbuzz_opt,
+          'Brotli': brotli_dep.found(),
++         'HVF': hvf_found,
+         }, bool_yn: true, section: 'Used Libraries')
+ 
+ # EOF
+diff --git a/meson_options.txt b/meson_options.txt
+index c9e48356d..23472d2bc 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -53,6 +53,11 @@ option('zlib',
+              'disabled', 'enabled' ],
+   description: 'Support reading gzip-compressed font files')
+ 
++option('hvf',
++  type: 'feature',
++  value: 'auto',
++  description: 'Support Apple Hierarchical Variable Font (HVF) format on Apple platforms')
++
+ option('error_strings',
+   type: 'boolean',
+   value: false,
+diff --git a/modules.cfg b/modules.cfg
+index fa8592b15..ee7637504 100644
+--- a/modules.cfg
++++ b/modules.cfg
+@@ -49,6 +49,12 @@ FONT_MODULES += cff
+ # This driver needs the `psaux', `pshinter', and `psnames' modules.
+ FONT_MODULES += cid
+ 
++# Apple Hierarchical Variable Font (HVF) driver.
++#
++# This driver needs the `sfnt' module and Apple's HVF library.
++# Controlled by FT_CONFIG_OPTION_HVF in ftoption.h.
++FONT_MODULES += hvf
++
+ # PFR/TrueDoc font driver.  See optional extension ftpfr.c below also.
+ FONT_MODULES += pfr
+ 
+diff --git a/src/hvf/hvf.c b/src/hvf/hvf.c
+new file mode 100644
+index 000000000..25f986a9a
+--- /dev/null
++++ b/src/hvf/hvf.c
+@@ -0,0 +1,25 @@
++/****************************************************************************
++ *
++ * hvf.c
++ *
++ *   FreeType HVF driver component (body only).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#define FT_MAKE_OPTION_SINGLE_OBJECT
++
++#include "hvfdrv.c"
++#include "hvfload.c"
++#include "hvfobjs.c"
++
++/* END */
+diff --git a/src/hvf/hvfdrv.c b/src/hvf/hvfdrv.c
+new file mode 100644
+index 000000000..e14f7f7e0
+--- /dev/null
++++ b/src/hvf/hvfdrv.c
+@@ -0,0 +1,633 @@
++/****************************************************************************
++ *
++ * hvfdrv.c
++ *
++ *   HVF font driver implementation (body).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#include <freetype/internal/ftdebug.h>
++#include <freetype/internal/ftstream.h>
++#include <freetype/internal/sfnt.h>
++#include <freetype/tttags.h>
++#include <freetype/internal/tttypes.h>  /* For TT_Face */
++#include <freetype/internal/services/svfntfmt.h>
++
++#ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
++#include <freetype/ftmm.h>
++#include <freetype/internal/services/svmm.h>
++#include <freetype/internal/services/svmetric.h>
++#endif
++
++#include "hvfdrv.h"
++#include "hvfobjs.h"
++#include "hvfload.h"
++#include "hvferror.h"
++
++  /**************************************************************************
++   *
++   * The macro FT_COMPONENT is used in trace mode.  It is an implicit
++   * parameter of the FT_TRACE() and FT_ERROR() macros, used to print/log
++   * messages during execution.
++   */
++
++#undef  FT_COMPONENT
++#define FT_COMPONENT  hvfdrv
++
++#ifdef FT_CONFIG_OPTION_HVF
++#define PUT_HVF_MODULE( a )  a
++#else
++#define PUT_HVF_MODULE( a )  NULL
++#endif
++
++#ifdef FT_CONFIG_OPTION_HVF
++
++  /**************************************************************************
++   *
++   *                          FACE  MANAGEMENT
++   *
++   */
++
++  /**************************************************************************
++   *
++   * @Function:
++   *   hvf_get_kerning
++   *
++   * @Description:
++   *   Get kerning vector between two glyphs. Delegates to SFNT service
++   *   since HVF fonts are TrueType/OpenType fonts.
++   *
++   * @Input:
++   *   face ::
++   *     A handle to the source face object.
++   *
++   *   left_glyph ::
++   *     The index of the left glyph in the kern pair.
++   *
++   *   right_glyph ::
++   *     The index of the right glyph in the kern pair.
++   *
++   * @Output:
++   *   kerning ::
++   *     The kerning vector in font units.
++   *
++   * @Return:
++   *   FreeType error code. 0 means success.
++   */
++  static FT_Error
++  hvf_get_kerning( FT_Face     face,
++                   FT_UInt     left_glyph,
++                   FT_UInt     right_glyph,
++                   FT_Vector*  kerning )
++  {
++    TT_Face       tt_face = (TT_Face)face;
++    SFNT_Service  sfnt = (SFNT_Service)tt_face->sfnt;
++
++    kerning->x = 0;
++    kerning->y = 0;
++
++    if ( sfnt )
++    {
++      /* Use 'kern' table if available since that can be faster; otherwise */
++      /* use GPOS kerning pairs if available.                              */
++      if ( tt_face->kern_avail_bits )
++        kerning->x = sfnt->get_kerning( tt_face,
++                                        left_glyph,
++                                        right_glyph );
++#ifdef TT_CONFIG_OPTION_GPOS_KERNING
++      else if ( tt_face->num_gpos_lookups_kerning )
++        kerning->x = sfnt->get_gpos_kerning( tt_face,
++                                             left_glyph,
++                                             right_glyph );
++#endif
++    }
++
++    return FT_Err_Ok;
++  }
++
++  /**************************************************************************
++   *
++   * @Function:
++   *   hvf_get_advances
++   *
++   * @Description:
++   *   Get advance widths/heights for a range of glyphs. Delegates to
++   *   TrueType infrastructure since HVF fonts are TrueType/OpenType fonts.
++   *
++   * @Input:
++   *   face ::
++   *     A handle to the source face object.
++   *
++   *   start ::
++   *     The first glyph index.
++   *
++   *   count ::
++   *     The number of advance values to retrieve.
++   *
++   *   flags ::
++   *     Loading flags (vertical/horizontal layout).
++   *
++   * @Output:
++   *   advances ::
++   *     The advance values in 16.16 format.
++   *
++   * @Return:
++   *   FreeType error code. 0 means success.
++   */
++  static FT_Error
++  hvf_get_advances( FT_Face    face,
++                    FT_UInt    start,
++                    FT_UInt    count,
++                    FT_Int32   flags,
++                    FT_Fixed  *advances )
++  {
++    TT_Face   tt_face = (TT_Face)face;
++    FT_Bool   horz;
++    FT_UInt   nn;
++
++    if ( !FT_IS_SFNT( face ) )
++      return FT_THROW( Unimplemented_Feature );
++
++    horz = !( flags & FT_LOAD_VERTICAL_LAYOUT );
++
++    if ( horz )
++    {
++      /* Check availability of horizontal metrics */
++      if ( !tt_face->horizontal.number_Of_HMetrics )
++        return FT_THROW( Unimplemented_Feature );
++
++#ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
++      /* no fast retrieval for blended MM fonts without HVAR table */
++      if ( ( FT_IS_NAMED_INSTANCE( face ) || FT_IS_VARIATION( face ) ) &&
++           !( tt_face->variation_support & TT_FACE_FLAG_VAR_HADVANCE ) )
++        return FT_THROW( Unimplemented_Feature );
++#endif
++    }
++    else  /* vertical */
++    {
++      /* check whether we have data from the `vmtx' table at all */
++      if ( !tt_face->vertical_info )
++        return FT_THROW( Unimplemented_Feature );
++
++#ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
++      /* no fast retrieval for blended MM fonts without VVAR table */
++      if ( ( FT_IS_NAMED_INSTANCE( face ) || FT_IS_VARIATION( face ) ) &&
++           !( tt_face->variation_support & TT_FACE_FLAG_VAR_VADVANCE ) )
++        return FT_THROW( Unimplemented_Feature );
++#endif
++    }
++
++    /* proceed to fast advances */
++    for ( nn = 0; nn < count; nn++ )
++    {
++      FT_UShort  aw;
++      FT_Short   dummy;
++
++      ( (SFNT_Service)tt_face->sfnt )->get_metrics( tt_face,
++                                                    !horz,
++                                                    start + nn,
++                                                    &dummy,
++                                                    &aw );
++
++      FT_TRACE5(( "  idx %u: advance %s %d font unit%s\n",
++                  start + nn,
++                  horz ? "width" : "height",
++                  aw,
++                  aw == 1 ? "" : "s" ));
++      advances[nn] = aw;
++    }
++
++    return FT_Err_Ok;
++  }
++
++
++  /**************************************************************************
++   *
++   *                          SERVICE DEFINITIONS
++   *
++   */
++
++#ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
++
++  /* Service delegation functions following CFF module pattern */
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_set_mm_blend( FT_Face    face,        /* HVF_Face */
++                    FT_UInt    num_coords,
++                    FT_Fixed*  coords )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++    HVF_Face                 hvf_face = (HVF_Face)face;
++    FT_Error                 error;
++
++    /* Call the underlying service */
++    error = mm->set_mm_blend( face, num_coords, coords );
++    
++    /* error == -1 means "no change"; early exit */
++    if ( error == -1 )
++      return FT_Err_Ok;
++    
++    /* If successful, refresh our cached HVF coordinates */
++    if ( !error )
++    {
++      FT_Error refresh_error = hvf_refresh_axis_coordinates( hvf_face );
++      if ( refresh_error )
++      {
++        FT_TRACE3(( "hvf_set_mm_blend: failed to refresh HVF coordinates (%d)\n",
++                    refresh_error ));
++        /* Don't fail the entire operation, just log the issue */
++      }
++    }
++
++    return error;
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_get_mm_blend( FT_Face    face,        /* HVF_Face */
++                    FT_UInt    num_coords,
++                    FT_Fixed*  coords )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_mm_blend( face, num_coords, coords );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_get_mm_var( FT_Face      face,    /* HVF_Face */
++                  FT_MM_Var**  master )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_mm_var( face, master );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_set_var_design( FT_Face    face,       /* HVF_Face */
++                      FT_UInt    num_coords,
++                      FT_Fixed*  coords )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++    HVF_Face                 hvf_face = (HVF_Face)face;
++    FT_Error                 error;
++
++    /* Call the underlying service */
++    error = mm->set_var_design( face, num_coords, coords );
++
++    /* error == -1 means "no change"; early exit */
++    if ( error == -1 )
++      return FT_Err_Ok;
++    
++    /* If successful, refresh our cached HVF coordinates */
++    if ( !error || error == -2 )
++    {
++      FT_Error refresh_error = hvf_refresh_axis_coordinates( hvf_face );
++      if ( refresh_error )
++      {
++        FT_TRACE3(( "hvf_set_var_design: failed to refresh HVF coordinates (%d)\n",
++                    refresh_error ));
++        /* Don't fail the entire operation, just log the issue */
++      }
++    }
++
++    return error;
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_get_var_design( FT_Face    face,       /* HVF_Face */
++                      FT_UInt    num_coords,
++                      FT_Fixed*  coords )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_var_design( face, num_coords, coords );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_set_named_instance( FT_Face   face,            /* HVF_Face */
++                          FT_UInt   instance_index )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++    HVF_Face                 hvf_face = (HVF_Face)face;
++    FT_Error                 error;
++
++    /* Call the underlying service */
++    error = mm->set_named_instance( face, instance_index );
++
++    /* error == -1 means "no change"; early exit */
++    if ( error == -1 )
++      return FT_Err_Ok;
++    
++    /* If successful, refresh our cached HVF coordinates */
++    if ( !error )
++    {
++      FT_Error refresh_error = hvf_refresh_axis_coordinates( hvf_face );
++      if ( refresh_error )
++      {
++        FT_TRACE3(( "hvf_set_named_instance: failed to refresh HVF coordinates (%d)\n",
++                    refresh_error ));
++        /* Don't fail the entire operation, just log the issue */
++      }
++    }
++
++    return error;
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_get_default_named_instance( FT_Face   face,            /* HVF_Face */
++                                  FT_UInt  *instance_index )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_default_named_instance( face, instance_index );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_construct_ps_name( FT_Face  face )  /* HVF_Face */
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    mm->construct_ps_name( face );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_load_delta_set_index_mapping( FT_Face            face,       /* HVF_Face */
++                                    FT_ULong           offset,
++                                    GX_DeltaSetIdxMap  map,
++                                    GX_ItemVarStore    itemStore,
++                                    FT_ULong           table_len )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->load_delta_set_idx_map( face, offset, map, itemStore, table_len );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_load_item_variation_store( FT_Face          face,       /* HVF_Face */
++                                 FT_ULong         offset,
++                                 GX_ItemVarStore  itemStore )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->load_item_var_store( face, offset, itemStore );
++  }
++
++  FT_CALLBACK_DEF( FT_ItemVarDelta )
++  hvf_get_item_delta( FT_Face          face,        /* HVF_Face */
++                      GX_ItemVarStore  itemStore,
++                      FT_UInt          outerIndex,
++                      FT_UInt          innerIndex )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_item_delta( face, itemStore, outerIndex, innerIndex );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_done_item_variation_store( FT_Face          face,       /* HVF_Face */
++                                 GX_ItemVarStore  itemStore )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    mm->done_item_var_store( face, itemStore );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_done_delta_set_index_map( FT_Face            face,       /* HVF_Face */
++                                GX_DeltaSetIdxMap  deltaSetIdxMap )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    mm->done_delta_set_idx_map( face, deltaSetIdxMap );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_get_var_blend( FT_Face      face,              /* HVF_Face */
++                     FT_UInt*     num_coords,
++                     FT_Fixed**   coords,
++                     FT_Fixed**   normalizedcoords,
++                     FT_MM_Var**  mm_var )
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    return mm->get_var_blend( face, num_coords, coords, normalizedcoords, mm_var );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_done_blend( FT_Face  face )  /* HVF_Face */
++  {
++    TT_Face                  tt_face = (TT_Face)face;
++    FT_Service_MultiMasters  mm      = (FT_Service_MultiMasters)tt_face->mm;
++
++    mm->done_blend( face );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_hadvance_adjust( FT_Face  face,    /* HVF_Face */
++                       FT_UInt  gindex,
++                       FT_Int   *avalue )
++  {
++    TT_Face                      tt_face = (TT_Face)face;
++    FT_Service_MetricsVariations var     = (FT_Service_MetricsVariations)tt_face->tt_var;
++
++    return var->hadvance_adjust( face, gindex, avalue );
++  }
++
++  FT_CALLBACK_DEF( FT_Error )
++  hvf_vadvance_adjust( FT_Face  face,    /* HVF_Face */
++                       FT_UInt  gindex,
++                       FT_Int   *avalue )
++  {
++    TT_Face                      tt_face = (TT_Face)face;
++    FT_Service_MetricsVariations var     = (FT_Service_MetricsVariations)tt_face->tt_var;
++
++    return var->vadvance_adjust( face, gindex, avalue );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_apply_mvar( FT_Face  face )    /* HVF_Face */
++  {
++    TT_Face                      tt_face = (TT_Face)face;
++    FT_Service_MetricsVariations var     = (FT_Service_MetricsVariations)tt_face->tt_var;
++
++    var->metrics_adjust( face );
++  }
++
++  FT_CALLBACK_DEF( void )
++  hvf_size_reset_height( FT_Size  size )
++  {
++    /* Delegate to size's face services */
++    TT_Face                      tt_face = (TT_Face)size->face;
++    FT_Service_MetricsVariations var     = (FT_Service_MetricsVariations)tt_face->tt_var;
++
++    if ( var->size_reset )
++      var->size_reset( size );
++  }
++
++  FT_DEFINE_SERVICE_MULTIMASTERSREC(
++    hvf_service_gx_multi_masters,
++
++    NULL,                         /* FT_Get_MM_Func              get_mm                     */
++    NULL,                         /* FT_Set_MM_Design_Func       set_mm_design              */
++    hvf_set_mm_blend,             /* FT_Set_MM_Blend_Func        set_mm_blend               */
++    hvf_get_mm_blend,             /* FT_Get_MM_Blend_Func        get_mm_blend               */
++    hvf_get_mm_var,               /* FT_Get_MM_Var_Func          get_mm_var                 */
++    hvf_set_var_design,           /* FT_Set_Var_Design_Func      set_var_design             */
++    hvf_get_var_design,           /* FT_Get_Var_Design_Func      get_var_design             */
++    hvf_set_named_instance,       /* FT_Set_Named_Instance_Func  set_named_instance         */
++    hvf_get_default_named_instance,
++                          /* FT_Get_Default_Named_Instance_Func get_default_named_instance */
++    NULL,                         /* FT_Set_MM_WeightVector_Func set_mm_weightvector        */
++    NULL,                         /* FT_Get_MM_WeightVector_Func get_mm_weightvector        */
++
++    hvf_construct_ps_name,        /* FT_Construct_PS_Name_Func   construct_ps_name          */
++    hvf_load_delta_set_index_mapping,
++                          /* FT_Var_Load_Delta_Set_Idx_Map_Func load_delta_set_idx_map     */
++    hvf_load_item_variation_store,
++                          /* FT_Var_Load_Item_Var_Store_Func    load_item_variation_store  */
++    hvf_get_item_delta,           /* FT_Var_Get_Item_Delta_Func  get_item_delta             */
++    hvf_done_item_variation_store,
++                          /* FT_Var_Done_Item_Var_Store_Func    done_item_variation_store  */
++    hvf_done_delta_set_index_map,
++                          /* FT_Var_Done_Delta_Set_Idx_Map_Func done_delta_set_index_map   */
++    hvf_get_var_blend,            /* FT_Get_Var_Blend_Func       get_var_blend              */
++    hvf_done_blend                /* FT_Done_Blend_Func          done_blend                 */
++  )
++
++  FT_DEFINE_SERVICE_METRICSVARIATIONSREC(
++    hvf_service_metrics_variations,
++
++    hvf_hadvance_adjust,  /* FT_HAdvance_Adjust_Func hadvance_adjust */
++    NULL,                 /* FT_LSB_Adjust_Func      lsb_adjust      */
++    NULL,                 /* FT_RSB_Adjust_Func      rsb_adjust      */
++
++    hvf_vadvance_adjust,  /* FT_VAdvance_Adjust_Func vadvance_adjust */
++    NULL,                 /* FT_TSB_Adjust_Func      tsb_adjust      */
++    NULL,                 /* FT_BSB_Adjust_Func      bsb_adjust      */
++    NULL,                 /* FT_VOrg_Adjust_Func     vorg_adjust     */
++
++    hvf_apply_mvar,       /* FT_Metrics_Adjust_Func  metrics_adjust  */
++    hvf_size_reset_height /* FT_Size_Reset_Func      size_reset      */
++  )
++
++#endif /* TT_CONFIG_OPTION_GX_VAR_SUPPORT */
++
++#ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
++  FT_DEFINE_SERVICEDESCREC3(
++    hvf_services,
++
++    FT_SERVICE_ID_FONT_FORMAT,        FT_FONT_FORMAT_HVF,
++    FT_SERVICE_ID_MULTI_MASTERS,      &hvf_service_gx_multi_masters,
++    FT_SERVICE_ID_METRICS_VARIATIONS, &hvf_service_metrics_variations )
++#else
++  FT_DEFINE_SERVICEDESCREC1(
++    hvf_services,
++
++    FT_SERVICE_ID_FONT_FORMAT, FT_FONT_FORMAT_HVF )
++#endif
++
++  FT_CALLBACK_DEF( FT_Module_Interface )
++  hvf_get_interface( FT_Module    driver,    /* HVF_Driver */
++                     const char*  hvf_interface )
++  {
++    FT_Library           library;
++    FT_Module_Interface  result;
++    FT_Module            sfntd;
++    SFNT_Service         sfnt;
++
++    FT_TRACE5(( "hvf_get_interface: Looking up service %s\n", hvf_interface ));
++    result = ft_service_list_lookup( hvf_services, hvf_interface );
++    if ( result )
++      return result;
++
++    FT_TRACE3(( "hvf_get_interface: Did not find service %s; falling back\n", hvf_interface ));
++    if ( !driver )
++      return NULL;
++    library = driver->library;
++    if ( !library )
++      return NULL;
++
++    /* only return the default interface from the SFNT module */
++    sfntd = FT_Get_Module( library, "sfnt" );
++    if ( sfntd )
++    {
++      sfnt = (SFNT_Service)( sfntd->clazz->module_interface );
++      if ( sfnt )
++        return sfnt->get_interface( driver, hvf_interface );
++    }
++
++    return 0;
++  }
++
++#endif /* FT_CONFIG_OPTION_HVF */
++
++
++  /**************************************************************************
++   *
++   *                          DRIVER INTERFACE
++   *
++   */
++
++  FT_DEFINE_DRIVER(
++    hvf_driver_class,
++
++      FT_MODULE_FONT_DRIVER       |
++      FT_MODULE_DRIVER_SCALABLE    |
++      FT_MODULE_DRIVER_HAS_HINTER,
++
++      sizeof ( FT_DriverRec ),
++
++      "hvf",           /* driver name                           */
++      0x10000L,        /* driver version == 1.0                 */
++      0x20000L,        /* driver requires FreeType 2.0 or above */
++
++      NULL,    /* module-specific interface */
++
++      NULL,                                /* FT_Module_Constructor  module_init   */
++      NULL,                                /* FT_Module_Destructor   module_done   */
++      PUT_HVF_MODULE( hvf_get_interface ), /* FT_Module_Requester    get_interface */
++
++    sizeof ( HVF_FaceRec ),
++    sizeof ( FT_SizeRec ),
++    sizeof ( FT_GlyphSlotRec ),
++
++    PUT_HVF_MODULE( hvf_face_init ),     /* FT_Face_InitFunc  init_face */
++    PUT_HVF_MODULE( hvf_face_done ),     /* FT_Face_DoneFunc  done_face */
++    NULL,                                /* FT_Size_InitFunc  init_size */
++    NULL,                                /* FT_Size_DoneFunc  done_size */
++    NULL,                                /* FT_Slot_InitFunc  init_slot */
++    NULL,                                /* FT_Slot_DoneFunc  done_slot */
++
++    PUT_HVF_MODULE( hvf_slot_load_glyph ),    /* FT_Slot_LoadFunc  load_glyph */
++
++    PUT_HVF_MODULE( hvf_get_kerning ),   /* FT_Face_GetKerningFunc   get_kerning  */
++    NULL,                                /* FT_Face_AttachFunc       attach_file  */
++    PUT_HVF_MODULE( hvf_get_advances ),  /* FT_Face_GetAdvancesFunc  get_advances */
++
++    NULL,                                /* FT_Size_RequestFunc  request_size */
++    NULL                                 /* FT_Size_SelectFunc   select_size  */
++  )
++
++/* END */
+diff --git a/src/hvf/hvfdrv.h b/src/hvf/hvfdrv.h
+new file mode 100644
+index 000000000..1d96c9ba9
+--- /dev/null
++++ b/src/hvf/hvfdrv.h
+@@ -0,0 +1,38 @@
++/****************************************************************************
++ *
++ * hvfdrv.h
++ *
++ *   Apple Hierarchical Variable Font (HVF) driver interface (specification only).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++
++#ifndef HVFDRV_H_
++#define HVFDRV_H_
++
++
++#include <freetype/internal/ftdrv.h>
++
++
++FT_BEGIN_HEADER
++
++
++  FT_DECLARE_DRIVER( hvf_driver_class )
++
++
++FT_END_HEADER
++
++#endif /* HVFDRV_H_ */
++
++
++/* END */
+diff --git a/src/hvf/hvferror.h b/src/hvf/hvferror.h
+new file mode 100644
+index 000000000..7a1131c2b
+--- /dev/null
++++ b/src/hvf/hvferror.h
+@@ -0,0 +1,40 @@
++/****************************************************************************
++ *
++ * hvferror.h
++ *
++ *   HVF error codes (specification only).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++  /**************************************************************************
++   *
++   * This file is used to define the HVF error enumeration constants.
++   *
++   */
++
++#ifndef HVFERROR_H_
++#define HVFERROR_H_
++
++#include <freetype/ftmoderr.h>
++
++#undef FTERRORS_H_
++
++#undef  FT_ERR_PREFIX
++#define FT_ERR_PREFIX  HVF_Err_
++#define FT_ERR_BASE    FT_Mod_Err_HVF
++
++#include <freetype/fterrors.h>
++
++#endif /* HVFERROR_H_ */
++
++/* END */
+diff --git a/src/hvf/hvfload.c b/src/hvf/hvfload.c
+new file mode 100644
+index 000000000..40e50cecc
+--- /dev/null
++++ b/src/hvf/hvfload.c
+@@ -0,0 +1,449 @@
++/****************************************************************************
++ *
++ * hvfload.c
++ *
++ *   HVF glyph loading (body).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#include <freetype/internal/ftdebug.h>
++#include <freetype/internal/ftstream.h>
++#include <freetype/internal/ftgloadr.h>
++#include <freetype/ftoutln.h>
++
++#include "hvfload.h"
++#include "hvfobjs.h"
++#include "hvferror.h"
++
++#undef  FT_COMPONENT
++#define FT_COMPONENT  hvfload
++
++#ifdef FT_CONFIG_OPTION_HVF
++
++  /**************************************************************************
++   *
++   * HVF Coordinate Conversion Macros
++   *
++   */
++
++  /* Convert HVF coordinates to FreeType 26.6 fixed point using pre-calculated scale factor */
++#define HVF_COORD_TO_FIXED( coord, scale_fixed )  \
++        ( (FT_F26Dot6)( (coord) * (scale_fixed) ) )
++
++
++ /* Pre-calculate scale factor for efficient coordinate conversion */
++ /* FreeType scale factors are 16.16 fixed point, convert to floating point for HVF */
++#define FT_SCALE_TO_HVF_SCALE_FIXED( scale, apply_scaling )  \
++        ( (apply_scaling) ? \
++          (HVFXYCoord)(scale) / 65536.0 : \
++          (HVFXYCoord)64.0 )
++
++ /* Cache management - clear cache after this many glyph loads */
++ /* TODO: Future enhancement - make this a settable property on the HVF driver */
++#define HVF_CACHE_CLEAR_COUNT  17
++
++  /**************************************************************************
++   *
++   * HVF Axis Values Setup with TrueType Integration
++   *
++   */
++
++  static FT_Error
++  hvf_set_variation_axes( HVF_Face  face )
++  {
++    FT_Error     error = FT_Err_Ok;
++    int          hvf_result;
++    int          axis_count;
++    FT_UInt      i;
++    FT_UInt      max_axes;
++    HVFAxisValue axis_value;
++
++    /* Only the HVF API calls need @available protection */
++    HVF_IF_AVAILABLE {
++      /* Get HVF axis count for current part */
++      axis_count = HVF_render_part_axis_count( (HVFPartRenderer*)face->renderer );
++      if ( axis_count <= 0 )
++      {
++        /* No axes for this part - this is normal for non-variable glyphs */
++        return FT_Err_Ok;
++      }
++
++      /* Calculate maximum axes to set - only set axes that have pre-stored coordinates */
++      /* Note: HVF_set_render_part already set all axes to default (0.0), so we only */
++      /* need to override axes that have actual variation coordinates */
++      max_axes = 0;
++      if ( face->axis_coords && face->num_axes > 0 )
++      {
++        max_axes = face->num_axes;
++        if ( max_axes > (FT_UInt)axis_count )
++          max_axes = (FT_UInt)axis_count;
++      }
++
++      /* Set only axes with pre-stored coordinates (HVF_set_render_part handles defaults) */
++      for ( i = 0; i < max_axes; i++ )
++      {
++        /* Use pre-converted HVF axis coordinate directly (no conversion needed) */
++        axis_value = ((HVFAxisValue*)face->axis_coords)[i];
++        FT_TRACE5(( "hvf_set_variation_axes: axis %u = %f (pre-converted HVF coord)\n",
++                    i, axis_value ));
++
++        /* Set the axis value in HVF renderer */
++        hvf_result = HVF_set_axis_value( (HVFPartRenderer*)face->renderer,
++                                        (int)i,
++                                        axis_value );
++        if ( hvf_result != 0 )
++        {
++          FT_TRACE1(( "hvf_set_variation_axes: HVF_set_axis_value failed for axis %u (%d)\n",
++                      i, hvf_result ));
++          /* Continue with other axes even if one fails */
++        }
++      }
++
++      /* Remaining axes already set to defaults by HVF_set_render_part - no action needed */
++      FT_TRACE3(( "hvf_set_variation_axes: configured %u of %d axis value%s using pre-converted HVF coordinates\n",
++                  max_axes, axis_count, axis_count == 1 ? "" : "s" ));
++    } else {
++      FT_TRACE3(( "hvf_set_variation_axes: HVF not available at runtime\n" ));
++      return FT_THROW( Unimplemented_Feature );
++    }
++
++    return error;
++  }
++
++  /**************************************************************************
++   *
++   * HVF Instruction Callback - Using FT_GlyphLoader
++   *
++   */
++
++  static HVFPartRenderAction
++  hvf_render_callback( HVFPartRenderInstruction  instruction,
++                       const HVFPartRenderParameters*  params,
++                       void*                     user_data )
++  {
++    HVF_RenderContext*  ctx = (HVF_RenderContext*)user_data;
++    FT_Error            error;
++
++    switch ( instruction )
++    {
++    case HVFPartRenderInstructionBeginPart:
++      FT_TRACE5(( "hvf_render: BeginPart (part %zu)\n", params->beginPart.partInfo.partId ));
++      return HVFPartRenderActionContinue;
++
++    case HVFPartRenderInstructionBeginPath:
++      FT_TRACE5(( "hvf_render: BeginPath\n" ));
++      ctx->path_begun = 1;
++      return HVFPartRenderActionContinue;
++
++    case HVFPartRenderInstructionAddPoint:
++      {
++        /* Move-to or Line-to point with pre-calculated scaling factors */
++        error = FT_GLYPHLOADER_CHECK_POINTS( ctx->loader, ctx->outline->n_points + 1, ctx->outline->n_contours );
++        if ( error )
++          return HVFPartRenderActionStop;
++
++        FT_Int n = ctx->outline->n_points;
++        ctx->outline->points[n].x = HVF_COORD_TO_FIXED( params->addPoint.pt.x, ctx->x_scale_fixed );
++        ctx->outline->points[n].y = HVF_COORD_TO_FIXED( params->addPoint.pt.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n] = FT_CURVE_TAG_ON;
++        ctx->outline->n_points++;
++
++        FT_TRACE5(( "hvf_render: AddPoint (%.2f, %.2f)\n",
++                    (double)ctx->outline->points[n].x / 64, (double)ctx->outline->points[n].y / 64 ));
++        return HVFPartRenderActionContinue;
++      }
++
++    case HVFPartRenderInstructionAddQuad:
++      {
++        /* Quadratic curve with pre-calculated scaling factors */
++        error = FT_GLYPHLOADER_CHECK_POINTS( ctx->loader, ctx->outline->n_points + 2, ctx->outline->n_contours );
++        if ( error )
++          return HVFPartRenderActionStop;
++
++        FT_Int n = ctx->outline->n_points;
++
++        /* Control point */
++        ctx->outline->points[n].x = HVF_COORD_TO_FIXED( params->addQuad.offpt.x, ctx->x_scale_fixed );
++        ctx->outline->points[n].y = HVF_COORD_TO_FIXED( params->addQuad.offpt.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n] = FT_CURVE_TAG_CONIC;
++
++        /* End point */
++        ctx->outline->points[n + 1].x = HVF_COORD_TO_FIXED( params->addQuad.onpt.x, ctx->x_scale_fixed );
++        ctx->outline->points[n + 1].y = HVF_COORD_TO_FIXED( params->addQuad.onpt.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n + 1] = FT_CURVE_TAG_ON;
++
++        ctx->outline->n_points += 2;
++
++        FT_TRACE5(( "hvf_render: AddQuad (%.2f,%.2f) (%.2f,%.2f)\n",
++                    (double)ctx->outline->points[n].x / 64, (double)ctx->outline->points[n].y / 64,
++                    (double)ctx->outline->points[n + 1].x / 64, (double)ctx->outline->points[n + 1].y / 64 ));
++        return HVFPartRenderActionContinue;
++      }
++
++    case HVFPartRenderInstructionAddCubic:
++      {
++        /* Cubic curve with pre-calculated scaling factors */
++        error = FT_GLYPHLOADER_CHECK_POINTS( ctx->loader, ctx->outline->n_points + 3, ctx->outline->n_contours );
++        if ( error )
++          return HVFPartRenderActionStop;
++
++        FT_Int n = ctx->outline->n_points;
++
++        /* First control point */
++        ctx->outline->points[n].x = HVF_COORD_TO_FIXED( params->addCubic.cp1.x, ctx->x_scale_fixed );
++        ctx->outline->points[n].y = HVF_COORD_TO_FIXED( params->addCubic.cp1.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n] = FT_CURVE_TAG_CUBIC;
++
++        /* Second control point */
++        ctx->outline->points[n + 1].x = HVF_COORD_TO_FIXED( params->addCubic.cp2.x, ctx->x_scale_fixed );
++        ctx->outline->points[n + 1].y = HVF_COORD_TO_FIXED( params->addCubic.cp2.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n + 1] = FT_CURVE_TAG_CUBIC;
++
++        /* End point */
++        ctx->outline->points[n + 2].x = HVF_COORD_TO_FIXED( params->addCubic.onpt.x, ctx->x_scale_fixed );
++        ctx->outline->points[n + 2].y = HVF_COORD_TO_FIXED( params->addCubic.onpt.y, ctx->y_scale_fixed );
++        ctx->outline->tags[n + 2] = FT_CURVE_TAG_ON;
++
++        ctx->outline->n_points += 3;
++
++        FT_TRACE5(( "hvf_render: AddCubic (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f)\n",
++                    (double)ctx->outline->points[n].x / 64, (double)ctx->outline->points[n].y / 64,
++                    (double)ctx->outline->points[n + 1].x / 64, (double)ctx->outline->points[n + 1].y / 64,
++                    (double)ctx->outline->points[n + 2].x / 64, (double)ctx->outline->points[n + 2].y / 64 ));
++        return HVFPartRenderActionContinue;
++      }
++
++    case HVFPartRenderInstructionClosePath:
++      if ( ctx->path_begun && ctx->outline->n_points > 0 )
++      {
++        /* Check space for contour */
++        error = FT_GLYPHLOADER_CHECK_POINTS( ctx->loader, ctx->outline->n_points, ctx->outline->n_contours + 1 );
++        if ( error )
++          return HVFPartRenderActionStop;
++        
++        /* Close current contour */
++        ctx->outline->contours[ctx->outline->n_contours++] =
++          (FT_UShort)( ctx->outline->n_points - 1 );
++        
++        ctx->path_begun = 0;
++      }
++      
++      FT_TRACE5(( "hvf_render: ClosePath\n" ));
++      return HVFPartRenderActionContinue;
++
++    case HVFPartRenderInstructionEndPath:
++      FT_TRACE5(( "hvf_render: EndPath\n" ));
++      return HVFPartRenderActionContinue;
++
++    case HVFPartRenderInstructionEndPart:
++      FT_TRACE5(( "hvf_render: EndPart (part %zu)\n", params->endPart.partInfo.partId ));
++      return HVFPartRenderActionContinue;
++
++    case HVFPartRenderInstructionStop:
++      FT_TRACE5(( "hvf_render: Stop\n" ));
++      return HVFPartRenderActionStop;
++
++    default:
++      FT_TRACE1(( "hvf_render: Unknown instruction %d\n", instruction ));
++      return HVFPartRenderActionStop;
++    }
++  }
++
++  /**************************************************************************
++   *
++   * @Function:
++   *   hvf_slot_load_glyph
++   *
++   * @Description:
++   *   Loads a glyph using HVF rendering with TrueType integration.
++   *
++   * @Input:
++   *   glyph ::
++   *     The glyph slot.
++   *
++   *   size ::
++   *     The size object.
++   *
++   *   glyph_index ::
++   *     The glyph index.
++   *
++   *   load_flags ::
++   *     Load flags.
++   *
++   * @Return:
++   *   FreeType error code. 0 means success.
++   */
++  FT_LOCAL_DEF( FT_Error )
++  hvf_slot_load_glyph( FT_GlyphSlot  glyph,
++                       FT_Size       size,
++                       FT_UInt       glyph_index,
++                       FT_Int32      load_flags )
++  {
++    HVF_Face            face = (HVF_Face)glyph->face;
++    FT_GlyphLoader      loader = glyph->internal->loader;
++    HVF_RenderContext   context;
++    FT_Error            error = FT_Err_Ok;
++    int                 hvf_result;
++    FT_Bool             apply_scaling = !( load_flags & FT_LOAD_NO_SCALE );
++
++    if ( !face->renderer )
++    {
++      FT_ERROR(( "hvf_slot_load_glyph: HVF renderer not initialized\n" ));
++      return FT_THROW( Invalid_Handle );
++    }
++
++    if ( glyph_index >= (FT_UInt)face->root.root.num_glyphs )
++      return FT_THROW( Invalid_Glyph_Index );
++
++    /* Initialize render context */
++    context.face       = face;
++    context.loader     = loader;
++    context.path_begun = 0;
++
++    /* Pre-calculate scaling factors based on FT_LOAD_NO_SCALE flag */
++    context.x_scale_fixed = FT_SCALE_TO_HVF_SCALE_FIXED( size->metrics.x_scale, apply_scaling );
++    context.y_scale_fixed = FT_SCALE_TO_HVF_SCALE_FIXED( size->metrics.y_scale, apply_scaling );
++    
++    FT_TRACE3(( "hvf_slot_load_glyph: %s (x_scale_fixed=%.1f, y_scale_fixed=%.1f)\n",
++                apply_scaling ? "scaling enabled" : "FT_LOAD_NO_SCALE - no scaling applied",
++                context.x_scale_fixed, context.y_scale_fixed ));
++
++    /* Initialize glyph loader */
++    FT_GlyphLoader_Rewind( loader );
++    context.outline = &loader->current.outline;
++
++    /* Only the HVF API calls need @available protection */
++    HVF_IF_AVAILABLE {
++      /* Configure HVF renderer for this glyph */
++      hvf_result = HVF_set_render_part( (HVFPartRenderer*)face->renderer,
++                                       (HVFPartIndex)glyph_index );
++      if ( hvf_result != 0 )
++      {
++        FT_TRACE1(( "hvf_slot_load_glyph: HVF_set_render_part failed (%d)\n",
++                    hvf_result ));
++        return FT_THROW( Invalid_Glyph_Index );
++      }
++
++      /* Set variation axis values for this glyph (using TT_Face infrastructure) */
++      error = hvf_set_variation_axes( face );
++      if ( error )
++      {
++        FT_TRACE1(( "hvf_slot_load_glyph: hvf_set_variation_axes failed (%d)\n",
++                    error ));
++        /* Continue with rendering even if axis setting fails */
++      }
++
++      /* Render the glyph using HVF */
++      hvf_result = HVF_render_current_part( (HVFPartRenderer*)face->renderer,
++                                           hvf_render_callback,
++                                           &context );
++      if ( hvf_result != 0 )
++      {
++        FT_TRACE1(( "hvf_slot_load_glyph: HVF_render_current_part failed (%d)\n",
++                    hvf_result ));
++        return FT_THROW( Invalid_Glyph_Index );
++      }
++    } else {
++      FT_TRACE3(( "hvf_slot_load_glyph: HVF not available at runtime\n" ));
++      return FT_THROW( Unimplemented_Feature );
++    }
++
++    /* Close any open path */
++    if ( context.path_begun && context.outline->n_points > 0 )
++    {
++      /* Check space for contour */
++      error = FT_GLYPHLOADER_CHECK_POINTS( loader, context.outline->n_points, context.outline->n_contours + 1 );
++      if ( !error )
++      {
++        context.outline->contours[context.outline->n_contours++] =
++          (FT_UShort)( context.outline->n_points - 1 );
++      }
++    }
++
++    /* Finalize glyph data with FT_GlyphLoader */
++    FT_GlyphLoader_Add( loader );
++
++    /* Set up glyph slot */
++    glyph->format = FT_GLYPH_FORMAT_OUTLINE;
++    glyph->outline = loader->base.outline;
++    /* Nearly all HVF glyphs have overlapping contours, since it is a stroke-based format */
++    glyph->outline.flags |= FT_OUTLINE_OVERLAP;
++
++    /* Set glyph metrics - get from TrueType infrastructure when possible */
++    {
++      FT_UShort advance_width = 0;
++      FT_Short  left_bearing = 0;
++      TT_Face   tt_face = (TT_Face)face;
++      SFNT_Service sfnt = (SFNT_Service)tt_face->sfnt;
++
++      /* Get metrics from TrueType tables if available */
++      if ( sfnt && glyph_index < (FT_UInt)face->root.root.num_glyphs )
++      {
++        sfnt->get_metrics( tt_face, 0, glyph_index, &left_bearing, &advance_width );
++      }
++      else
++      {
++        /* Fallback to reasonable defaults */
++        advance_width = (FT_UShort)(size->metrics.x_ppem);
++        left_bearing = 0;
++      }
++
++      /* Set up unscaled metrics */
++      glyph->metrics.width       = advance_width;
++      glyph->metrics.height      = size->metrics.y_ppem;
++      glyph->metrics.horiBearingX = left_bearing;
++      glyph->metrics.horiBearingY = glyph->metrics.height;
++      glyph->metrics.horiAdvance  = advance_width;
++      glyph->metrics.vertBearingX = glyph->metrics.width / 2;
++      glyph->metrics.vertBearingY = 0;
++      glyph->metrics.vertAdvance  = glyph->metrics.height;
++    }
++
++    /* Scale metrics if scaling was applied (coordinates already scaled in callback) */
++    if ( apply_scaling )
++    {
++      FT_Size_Metrics*  metrics = &size->metrics;
++      
++      /* Scale metrics using size metrics - coordinates already scaled in callback */
++      glyph->metrics.width       = FT_MulFix( glyph->metrics.width, metrics->x_scale );
++      glyph->metrics.height      = FT_MulFix( glyph->metrics.height, metrics->y_scale );
++      glyph->metrics.horiBearingX = FT_MulFix( glyph->metrics.horiBearingX, metrics->x_scale );
++      glyph->metrics.horiBearingY = FT_MulFix( glyph->metrics.horiBearingY, metrics->y_scale );
++      glyph->metrics.horiAdvance  = FT_MulFix( glyph->metrics.horiAdvance, metrics->x_scale );
++      glyph->metrics.vertBearingX = FT_MulFix( glyph->metrics.vertBearingX, metrics->x_scale );
++      glyph->metrics.vertBearingY = FT_MulFix( glyph->metrics.vertBearingY, metrics->y_scale );
++      glyph->metrics.vertAdvance  = FT_MulFix( glyph->metrics.vertAdvance, metrics->y_scale );
++    }
++
++    /* Cache management - clear cache every HVF_CACHE_CLEAR_COUNT glyphs */
++    face->cache_count++;
++    if ( face->cache_count >= HVF_CACHE_CLEAR_COUNT )
++    {
++      HVF_IF_AVAILABLE {
++        HVF_clear_part_cache( (HVFPartRenderer*)face->renderer );
++        face->cache_count = 0;
++        FT_TRACE3(( "hvf_slot_load_glyph: cleared HVF cache\n" ));
++      } else {
++        FT_TRACE3(( "hvf_slot_load_glyph: HVF not available for cache clearing\n" ));
++      }
++    }
++
++    FT_TRACE2(( "hvf_slot_load_glyph: glyph %u loaded successfully\n",
++                glyph_index ));
++
++    return error;
++  }
++
++#endif /* FT_CONFIG_OPTION_HVF */
++
++/* END */
+diff --git a/src/hvf/hvfload.h b/src/hvf/hvfload.h
+new file mode 100644
+index 000000000..f8d182751
+--- /dev/null
++++ b/src/hvf/hvfload.h
+@@ -0,0 +1,39 @@
++/****************************************************************************
++ *
++ * hvfload.h
++ *
++ *   HVF glyph loading (specification).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#ifndef HVFLOAD_H_
++#define HVFLOAD_H_
++
++#include <freetype/freetype.h>
++#include <freetype/internal/ftobjs.h>
++
++FT_BEGIN_HEADER
++
++#ifdef FT_CONFIG_OPTION_HVF
++  FT_LOCAL( FT_Error )
++  hvf_slot_load_glyph( FT_GlyphSlot  glyph,
++                       FT_Size       size,
++                       FT_UInt       glyph_index,
++                       FT_Int32      load_flags );
++#endif /* FT_CONFIG_OPTION_HVF */
++
++FT_END_HEADER
++
++#endif /* HVFLOAD_H_ */
++
++/* END */
+diff --git a/src/hvf/hvfobjs.c b/src/hvf/hvfobjs.c
+new file mode 100644
+index 000000000..4c04458a2
+--- /dev/null
++++ b/src/hvf/hvfobjs.c
+@@ -0,0 +1,425 @@
++/****************************************************************************
++ *
++ * hvfobjs.c
++ *
++ *   HVF objects manager (body).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#include <freetype/internal/ftdebug.h>
++#include <freetype/internal/ftstream.h>
++#include <freetype/internal/sfnt.h>
++#include <freetype/tttags.h>
++#include <freetype/ftmm.h>
++
++#include "hvfobjs.h"
++#include "hvferror.h"
++
++#undef  FT_COMPONENT
++#define FT_COMPONENT  hvfobjs
++
++#ifdef FT_CONFIG_OPTION_HVF
++
++  /**************************************************************************
++   *
++   *                             FACE  MANAGEMENT
++   *
++   */
++
++  static FT_Error
++  hvf_load_tables( HVF_Face  face )
++  {
++    FT_Error   error;
++    FT_Stream  stream;
++    TT_Face    tt_face = (TT_Face)face;  /* Cast to access TT_Face members */
++
++    /* Use the stream from TT_Face root */
++    stream = FT_FACE_STREAM( face );
++
++    /* Load required hvgl table using memory mapping */
++    error = tt_face->goto_table( tt_face, TTAG_hvgl, stream, &face->hvgl_size );
++    if ( error )
++    {
++      FT_TRACE2(( "hvf_load_tables: missing required 'hvgl' table\n" ));
++      return error;
++    }
++
++    /* Memory-map the hvgl table data instead of copying it */
++    if ( FT_FRAME_EXTRACT( face->hvgl_size, face->hvgl_data ) )
++    {
++      face->hvgl_size = 0;
++      FT_TRACE2(( "hvf_load_tables: failed to extract 'hvgl' table\n" ));
++      return FT_THROW( Invalid_Table );
++    }
++
++    FT_TRACE2(( "hvf_load_tables: memory-mapped 'hvgl' table (%lu bytes)\n",
++                face->hvgl_size ));
++
++    /* Load optional hvpm table using memory mapping */
++    error = tt_face->goto_table( tt_face, TTAG_hvpm, stream, &face->hvpm_size );
++    if ( error )
++    {
++      face->hvpm_data = NULL;  /* Ensure NULL for pointer check */
++      face->hvpm_size = 0;
++      FT_TRACE2(( "hvf_load_tables: no 'hvpm' table found (optional)\n" ));
++    }
++    else
++    {
++      /* Memory-map the hvpm table data instead of copying it */
++      if ( FT_FRAME_EXTRACT( face->hvpm_size, face->hvpm_data ) )
++      {
++        face->hvpm_data = NULL;
++        face->hvpm_size = 0;
++        FT_TRACE2(( "hvf_load_tables: failed to extract 'hvpm' table\n" ));
++      }
++      else
++      {
++        FT_TRACE2(( "hvf_load_tables: memory-mapped 'hvpm' table (%lu bytes)\n",
++                    face->hvpm_size ));
++      }
++    }
++
++    return FT_Err_Ok;
++  }
++
++  static FT_Error
++  hvf_init_renderer( HVF_Face  face )
++  {
++    FT_Error   error = FT_Err_Ok;
++    FT_Memory  memory = FT_FACE_MEMORY( face );
++    size_t     storage_size;
++    int        hvf_result;
++
++    if ( !face->hvgl_data )
++      return FT_THROW( Invalid_Table );
++
++    /* Create HVF renderer - only once per face */
++    if ( !face->renderer )
++    {
++      HVF_IF_AVAILABLE {
++        /* Get required storage size */
++        storage_size = HVF_part_renderer_storage_size();
++        if ( storage_size == 0 )
++        {
++          FT_TRACE1(( "hvf_init_renderer: HVF_part_renderer_storage_size failed\n" ));
++          return FT_THROW( Invalid_Table );
++        }
++
++        /* Allocate storage for renderer */
++        if ( FT_ALLOC( face->renderer, storage_size ) )
++          return error;
++
++        /* Initialize HVF renderer with hvgl and optional hvpm table data */
++        hvf_result = HVF_open_part_renderer( face->hvgl_data,
++                                            face->hvgl_size,
++                                            face->hvpm_data,  /* NULL if not available */
++                                            face->hvpm_size,  /* 0 if not available */
++                                            face->renderer,
++                                            storage_size );
++        if ( hvf_result != 0 )
++        {
++          FT_TRACE1(( "hvf_init_renderer: HVF_open_part_renderer failed (%d)\n",
++                      hvf_result ));
++          FT_FREE( face->renderer );
++          return FT_THROW( Invalid_Table );
++        }
++
++        face->cache_count = 0;
++        FT_TRACE2(( "hvf_init_renderer: HVF renderer initialized (%s hvpm)\n",
++                    face->hvpm_data ? "with" : "without" ));
++      } else {
++        FT_TRACE3(( "hvf_init_renderer: HVF not available at runtime\n" ));
++        return FT_THROW( Invalid_Table );
++      }
++    }
++
++    return error;
++  }
++
++  static FT_Error
++  hvf_init_axis_coordinates( HVF_Face  face )
++  {
++    FT_Error     error = FT_Err_Ok;
++    FT_Memory    memory = FT_FACE_MEMORY( face );
++    FT_MM_Var*   mm_var = NULL;
++
++    /* Initialize axis data */
++    face->num_axes = 0;
++    face->axis_coords = NULL;
++
++    /* Check if this is a variable font and get axis information */
++    error = FT_Get_MM_Var( (FT_Face)face, &mm_var );
++    if ( error )
++    {
++      /* Not a variable font or error getting variation info - that's fine */
++      FT_TRACE3(( "hvf_init_axis_coordinates: not a variable font or no MM info: %x\n", error ));
++      return FT_Err_Ok;
++    }
++
++    if ( mm_var && mm_var->num_axis > 0 )
++    {
++      face->num_axes = mm_var->num_axis;
++      
++      /* Allocate storage for HVF axis coordinates */
++      if ( !( FT_MEM_QNEW_ARRAY( *(HVFAxisValue**)&face->axis_coords, face->num_axes ) ) )
++      {
++        face->num_axes = 0;
++        goto Cleanup;
++      }
++
++      /* Initialize coordinates using the shared refresh function */
++      error = hvf_refresh_axis_coordinates( face );
++      if ( error )
++      {
++        FT_FREE( face->axis_coords );
++        face->num_axes = 0;
++        goto Cleanup;
++      }
++    }
++
++  Cleanup:
++    if ( mm_var )
++      FT_Done_MM_Var( FT_FACE_LIBRARY( face ), mm_var );
++
++    return error;
++  }
++
++  FT_LOCAL_DEF( FT_Error )
++  hvf_refresh_axis_coordinates( HVF_Face  face )
++  {
++    FT_Error     error = FT_Err_Ok;
++    FT_Memory    memory = FT_FACE_MEMORY( face );
++    FT_Fixed*    ft_coords = NULL;
++    FT_UInt      i;
++
++    /* Only refresh if we have cached coordinates */
++    if ( !face->axis_coords || face->num_axes == 0 )
++      return FT_Err_Ok;
++
++    /* Allocate temporary storage for current FreeType coordinates */
++    if ( !( FT_MEM_QNEW_ARRAY( ft_coords, face->num_axes ) ) )
++      return error;
++
++    /* Get current variation coordinates */
++    error = FT_Get_Var_Blend_Coordinates( (FT_Face)face, face->num_axes, ft_coords );
++    if ( error )
++    {
++      /* If we can't get coordinates, set to defaults */
++      FT_ARRAY_ZERO( (HVFAxisValue*)face->axis_coords, face->num_axes );
++      FT_TRACE3(( "hvf_refresh_axis_coordinates: could not get blend coordinates, using defaults\n" ));
++      error = FT_Err_Ok;  /* Not fatal */
++    }
++    else
++    {
++      /* Convert FreeType coordinates to HVF coordinates */
++      for ( i = 0; i < face->num_axes; i++ )
++      {
++        ((HVFAxisValue*)face->axis_coords)[i] = FT_COORD_TO_HVF_AXIS( ft_coords[i] );
++        FT_TRACE5(( "hvf_refresh_axis_coordinates: axis %u: FT coord %ld -> HVF coord %f\n",
++                    i, ft_coords[i], ((HVFAxisValue*)face->axis_coords)[i] ));
++      }
++      FT_TRACE3(( "hvf_refresh_axis_coordinates: refreshed %u axis coordinates\n", face->num_axes ));
++      
++      /* Clear HVF renderer cache since axis coordinates changed */
++      /* Cached parts were rendered with old axis values and are now invalid */
++      if ( face->renderer )
++      {
++        HVF_IF_AVAILABLE {
++          HVF_clear_part_cache( (HVFPartRenderer*)face->renderer );
++          face->cache_count = 0;
++          FT_TRACE4(( "hvf_refresh_axis_coordinates: cleared HVF cache due to axis change\n" ));
++        } else {
++          FT_TRACE3(( "hvf_refresh_axis_coordinates: HVF not available at runtime\n" ));
++        }
++      }
++    }
++
++    /* Free temporary FreeType coordinate storage */
++    FT_FREE( ft_coords );
++
++    return error;
++  }
++
++  /**************************************************************************
++   *
++   * @Function:
++   *   hvf_face_init
++   *
++   * @Description:
++   *   Initializes a given HVF face object.
++   *
++   * @Input:
++   *   stream ::
++   *     The source font stream.
++   *
++   *   face_index ::
++   *     The index of the font face in the resource.
++   *
++   *   num_params ::
++   *     Number of additional generic parameters. Ignored.
++   *
++   *   params ::
++   *     Additional generic parameters. Ignored.
++   *
++   * @InOut:
++   *   face ::
++   *     The newly built face object.
++   *
++   * @Return:
++   *   FreeType error code. 0 means success.
++   */
++  FT_LOCAL_DEF( FT_Error )
++  hvf_face_init( FT_Stream      stream,
++                 FT_Face        face,
++                 FT_Int         typeface_index,
++                 FT_Int         num_params,
++                 FT_Parameter*  parameters )
++  {
++    FT_Error       error;
++    FT_Library     library = FT_FACE_LIBRARY( face );
++    SFNT_Service   sfnt;
++    TT_Face        tt_face = (TT_Face)face;  /* Cast to access TT_Face members */
++
++    FT_TRACE2(( "HVF driver\n" ));
++
++    /* Check HVF availability at runtime (Apple platforms only) */
++    HVF_IF_AVAILABLE {
++      /* HVF is available - continue with initialization */
++    } else {
++      FT_TRACE2(( "hvf_face_init: HVF not available at runtime\n" ));
++      return FT_THROW( Unknown_File_Format );
++    }
++
++    /* Check for SFNT wrapper */
++    sfnt = (SFNT_Service)FT_Get_Module_Interface( library, "sfnt" );
++    if ( !sfnt )
++    {
++      FT_ERROR(( "hvf_face_init: cannot access `sfnt' module\n" ));
++      error = FT_THROW( Missing_Module );
++      goto Exit;
++    }
++
++    /* create input stream from resource */
++    if ( FT_STREAM_SEEK( 0 ) )
++      goto Exit;
++
++    /* check that we have a valid HVF font */
++    FT_TRACE2(( "  " ));
++    error = sfnt->init_face( stream, tt_face, typeface_index, num_params, parameters );
++    if ( error )
++    {
++      FT_TRACE1(( "hvf_face_init: sfnt initialization failed (%d)\n", error ));
++      goto Exit;
++    }
++
++    /* Verify this is actually an HVF font by checking for hvgl table */
++    error = tt_face->goto_table( tt_face, TTAG_hvgl, stream, NULL );
++    if ( error )
++    {
++      FT_TRACE1(( "hvf_face_init: not an HVF font (missing 'hvgl' table)\n" ));
++      error = FT_THROW( Unknown_File_Format );
++      goto Exit;
++    }
++
++    /* Mark face as scalable and set HVF-specific flags */
++    face->face_flags |= FT_FACE_FLAG_SCALABLE;
++
++    /* If we are performing a simple font format check, exit immediately. */
++    if ( typeface_index < 0 )
++      return FT_Err_Ok;
++
++    /* Load font directory */
++    error = sfnt->load_face( stream, tt_face, typeface_index, num_params, parameters );
++    if ( error )
++      goto Exit;
++
++    /* Load HVF-specific tables */
++    error = hvf_load_tables( (HVF_Face)face );
++    if ( error )
++      goto Exit;
++
++    /* Initialize HVF renderer */
++    error = hvf_init_renderer( (HVF_Face)face );
++    if ( error )
++      goto Exit;
++
++    /* Get variation axis information once during face initialization */
++    error = hvf_init_axis_coordinates( (HVF_Face)face );
++    if ( error )
++      goto Exit;
++
++    FT_TRACE2(( "hvf_face_init: HVF face initialized successfully\n" ));
++
++  Exit:
++    return error;
++  }
++
++  /**************************************************************************
++   *
++   * @Function:
++   *   hvf_face_done
++   *
++   * @Description:
++   *   Finalizes a given face object.
++   *
++   * @Input:
++   *   face ::
++   *     A pointer to the face object to destroy.
++   */
++  FT_LOCAL_DEF( void )
++  hvf_face_done( FT_Face  face )
++  {
++    FT_Memory    memory;
++    FT_Stream    stream;
++    TT_Face      tt_face;
++    HVF_Face     hvf_face;
++    SFNT_Service sfnt;
++
++    if ( !face )
++      return;
++
++    hvf_face = (HVF_Face)face;
++    tt_face = (TT_Face)face;
++    memory  = FT_FACE_MEMORY( face );
++    stream  = FT_FACE_STREAM( face );
++    sfnt    = (SFNT_Service)tt_face->sfnt;  /* Use inherited SFNT service pointer */
++
++    /* Cleanup HVF renderer */
++    if ( hvf_face->renderer )
++    {
++      HVF_IF_AVAILABLE {
++        HVF_close_part_renderer( (HVFPartRenderer*)hvf_face->renderer );
++      } else {
++        FT_TRACE3(( "hvf_face_done: HVF not available at runtime\n" ));
++      }
++      FT_FREE( hvf_face->renderer );
++    }
++
++    /* Release axis coordinates storage */
++    if ( hvf_face->axis_coords )
++      FT_FREE( hvf_face->axis_coords );
++
++    /* Release memory-mapped table data */
++    if ( hvf_face->hvgl_data )
++      FT_FRAME_RELEASE( hvf_face->hvgl_data );
++    if ( hvf_face->hvpm_data )
++      FT_FRAME_RELEASE( hvf_face->hvpm_data );
++
++    /* Cleanup SFNT (this will clean up the TT_Face base class) */
++    if ( sfnt )
++      sfnt->done_face( tt_face );
++  }
++
++#endif /* FT_CONFIG_OPTION_HVF */
++
++/* END */
+diff --git a/src/hvf/hvfobjs.h b/src/hvf/hvfobjs.h
+new file mode 100644
+index 000000000..4818d1b27
+--- /dev/null
++++ b/src/hvf/hvfobjs.h
+@@ -0,0 +1,139 @@
++/****************************************************************************
++ *
++ * hvfobjs.h
++ *
++ *   HVF objects manager (specification).
++ *
++ * Copyright (C) 2025 by
++ * Apple Inc.
++ * written by Deborah Goldsmith <goldsmit@apple.com>
++ *
++ * This file is part of the FreeType project, and may only be used,
++ * modified, and distributed under the terms of the FreeType project
++ * license, LICENSE.TXT.  By continuing to use, modify, or distribute
++ * this file you indicate that you have read the license and
++ * understand and accept it fully.
++ *
++ */
++
++#ifndef HVFOBJS_H_
++#define HVFOBJS_H_
++
++#include <freetype/freetype.h>
++#include <freetype/ftglyph.h>
++#include <freetype/internal/ftobjs.h>
++#include <freetype/internal/tttypes.h>  /* For TT_FaceRec */
++
++FT_BEGIN_HEADER
++
++  /**************************************************************************
++   *
++   * @type:
++   *   HVF_Face
++   *
++   * @description:
++   *   A handle to an HVF face object. Always available for compatibility
++   *   (following SVG module pattern).
++   */
++  typedef struct HVF_FaceRec_*  HVF_Face;
++
++  /**************************************************************************
++   *
++   * @struct:
++   *   HVF_FaceRec
++   *
++   * @description:
++   *   HVF face record. This structure inherits from TT_FaceRec
++   *   instead of FT_FaceRec because HVF fonts are TrueType/OpenType fonts
++   *   with additional HVF tables, and the HVF driver calls into SFNT functions
++   *   that require TT_Face access.
++   *
++   *   NOTE: Structure is always available (like SVG module) with all fields
++   *   always present. Only the implementation functions are conditionally compiled.
++   */
++  typedef struct  HVF_FaceRec_
++  {
++    TT_FaceRec    root;                  /* Inherit from TT_FaceRec */
++
++    void*         renderer;              /* HVFPartRenderer storage or NULL */
++
++    /* HVF-specific table data (memory-mapped) */
++    FT_Byte*      hvgl_data;             /* hvgl table data */
++    FT_ULong      hvgl_size;
++    FT_Byte*      hvpm_data;             /* hvpm table data, NULL if not present */
++    FT_ULong      hvpm_size;
++
++    /* Cache management */
++    FT_UInt       cache_count;           /* Clear cache every N glyphs */
++
++    /* Variation axis data (allocated once in hvf_face_init) */
++    FT_UInt       num_axes;              /* Number of variation axes */
++    void*         axis_coords;           /* Pre-converted HVF axis coordinates (HVFAxisValue* when configured) */
++
++  } HVF_FaceRec;
++
++  /* Conditional declarations - only when HVF is enabled */
++#ifdef FT_CONFIG_OPTION_HVF
++
++#include <hvf/Scaler.h>
++
++  /* Runtime availability checking for Apple platforms */
++#ifdef HVF_RUNTIME_AVAILABLE
++  /* Single macro that encapsulates the __builtin_available check for C/C++ */
++#define HVF_IF_AVAILABLE \
++  if (__builtin_available(macOS 15.4, iOS 18.4, *))
++
++#else /* !HVF_RUNTIME_AVAILABLE */
++  /* Non-Apple platforms: No runtime check needed */
++#define HVF_IF_AVAILABLE \
++  if (1)
++
++#endif /* HVF_RUNTIME_AVAILABLE */
++
++  /**************************************************************************
++   *
++   * @struct:
++   *   HVF_RenderContext
++   *
++   * @description:
++   *   Context for HVF rendering callbacks.
++   */
++  typedef struct  HVF_RenderContext_
++  {
++    FT_GlyphLoader  loader;              /* Standard FreeType loader */
++    FT_Outline*     outline;             /* Points to loader->current.outline */
++    FT_Bool         path_begun;          /* Path state tracking */
++    
++    HVF_Face        face;                /* Reference to face */
++
++    /* Pre-calculated scaling factors for efficient coordinate conversion */
++    HVFXYCoord      x_scale_fixed;       /* Pre-calculated: x_scale * 65536.0 (or just 65536.0) */
++    HVFXYCoord      y_scale_fixed;       /* Pre-calculated: y_scale * 65536.0 (or just 65536.0) */
++
++  } HVF_RenderContext;
++
++  /* Function declarations */
++  FT_LOCAL( FT_Error )
++  hvf_face_init( FT_Stream      stream,
++                 FT_Face        face,
++                 FT_Int         typeface_index,
++                 FT_Int         num_params,
++                 FT_Parameter*  parameters );
++
++  FT_LOCAL( void )
++  hvf_face_done( FT_Face  face );
++
++  FT_LOCAL( FT_Error )
++  hvf_refresh_axis_coordinates( HVF_Face  face );
++
++  /* Convert FreeType normalized coordinates to HVF axis values */
++#define FT_COORD_TO_HVF_AXIS( coord )  \
++         ( (HVFAxisValue)(coord) / 65536.0 )
++
++#endif /* FT_CONFIG_OPTION_HVF */
++
++FT_END_HEADER
++
++#endif /* HVFOBJS_H_ */
++
++/* END */
+diff --git a/src/hvf/module.mk b/src/hvf/module.mk
+new file mode 100644
+index 000000000..181530c6f
+--- /dev/null
++++ b/src/hvf/module.mk
+@@ -0,0 +1,22 @@
++#
++# FreeType 2 HVF module definition
++#
++
++# Copyright (C) 2025 by
++# Apple Inc.
++# written by Deborah Goldsmith <goldsmit@apple.com>
++#
++# This file is part of the FreeType project, and may only be used, modified,
++# and distributed under the terms of the FreeType project license,
++# LICENSE.TXT.  By continuing to use, modify, or distribute this file you
++# indicate that you have read the license and understand and accept it
++# fully.
++
++FTMODULE_H_COMMANDS += HVF_DRIVER
++
++define HVF_DRIVER
++$(OPEN_DRIVER) FT_Driver_ClassRec, hvf_driver_class $(CLOSE_DRIVER)
++$(ECHO_DRIVER)hvf       $(ECHO_DRIVER_DESC)Apple HVF fonts$(ECHO_DRIVER_DONE)
++endef
++
++# EOF
+diff --git a/src/hvf/rules.mk b/src/hvf/rules.mk
+new file mode 100644
+index 000000000..5d3b38150
+--- /dev/null
++++ b/src/hvf/rules.mk
+@@ -0,0 +1,66 @@
++#
++# FreeType 2 HVF driver configuration rules
++#
++
++# Copyright (C) 2025 by
++# Apple Inc.
++# written by Deborah Goldsmith <goldsmit@apple.com>
++#
++# This file is part of the FreeType project, and may only be used, modified,
++# and distributed under the terms of the FreeType project license,
++# LICENSE.TXT.  By continuing to use, modify, or distribute this file you
++# indicate that you have read the license and understand and accept it
++# fully.
++
++# HVF driver directory
++#
++HVF_DIR := $(SRC_DIR)/hvf
++
++# compilation flags for the driver
++#
++HVF_COMPILE := $(CC) $(ANSIFLAGS)                           \
++                     $I$(subst /,$(COMPILER_SEP),$(HVF_DIR)) \
++                     $(INCLUDE_FLAGS)                        \
++                     $(FT_CFLAGS)
++
++# HVF driver sources (i.e., C files)
++#
++HVF_DRV_SRC := $(HVF_DIR)/hvfdrv.c   \
++               $(HVF_DIR)/hvfload.c  \
++               $(HVF_DIR)/hvfobjs.c
++
++# HVF driver headers
++#
++HVF_DRV_H := $(HVF_DIR)/hvfdrv.h   \
++             $(HVF_DIR)/hvfload.h  \
++             $(HVF_DIR)/hvfobjs.h  \
++             $(HVF_DIR)/hvferror.h
++
++# HVF driver object(s)
++#
++#   HVF_DRV_OBJ_M is used during `multi' builds
++#   HVF_DRV_OBJ_S is used during `single' builds
++#
++HVF_DRV_OBJ_M := $(HVF_DRV_SRC:$(HVF_DIR)/%.c=$(OBJ_DIR)/%.$O)
++HVF_DRV_OBJ_S := $(OBJ_DIR)/hvf.$O
++
++# HVF driver source file for single build
++#
++HVF_DRV_SRC_S := $(HVF_DIR)/hvf.c
++
++# HVF driver - single object
++#
++$(HVF_DRV_OBJ_S): $(HVF_DRV_SRC_S) $(HVF_DRV_SRC) $(FREETYPE_H) $(HVF_DRV_H)
++	$(HVF_COMPILE) $T$(subst /,$(COMPILER_SEP),$@ $(HVF_DRV_SRC_S))
++
++# HVF driver - multiple objects
++#
++$(OBJ_DIR)/%.$O: $(HVF_DIR)/%.c $(FREETYPE_H) $(HVF_DRV_H)
++	$(HVF_COMPILE) $T$(subst /,$(COMPILER_SEP),$@ $<)
++
++# update main driver object lists
++#
++DRV_OBJS_S += $(HVF_DRV_OBJ_S)
++DRV_OBJS_M += $(HVF_DRV_OBJ_M)
++
++# EOF
+diff --git a/src/sfnt/sfobjs.c b/src/sfnt/sfobjs.c
+index 6af35787e..acf79e5cd 100644
+--- a/src/sfnt/sfobjs.c
++++ b/src/sfnt/sfobjs.c
+@@ -723,6 +723,7 @@
+       /* note that `glyf' or `CFF2' have precedence */
+       if ( face->goto_table( face, TTAG_glyf, stream, 0 ) &&
+            face->goto_table( face, TTAG_CFF2, stream, 0 ) &&
++           face->goto_table( face, TTAG_hvgl, stream, 0 ) &&
+            !face->goto_table( face, TTAG_CFF, stream, 0 ) )
+         num_instances = 0;
+ 
+diff --git a/src/truetype/ttobjs.c b/src/truetype/ttobjs.c
+index fd0c0ad14..69bd05de8 100644
+--- a/src/truetype/ttobjs.c
++++ b/src/truetype/ttobjs.c
+@@ -734,6 +734,9 @@
+         /* a `loca' table is not valid              */
+         if ( face->glyf_len && FT_ERR_EQ( error, Table_Missing ) )
+           goto Exit;
++        /* if both glyf and loca tables are missing, not a valid file */
++        if ( face->glyf_len == 0 && FT_ERR_EQ( error, Locations_Missing) )
++          goto Bad_Format;
+         if ( error )
+           goto Exit;
+       }
+-- 
+GitLab
+
+
+From 70431488af984ff5f2fd5631906f25cd7153297c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Suzuki=2C=20Toshiya=20=28=E9=88=B4=E6=9C=A8=E4=BF=8A?=
+ =?UTF-8?q?=E5=93=89=29?= <mpsuzuki@hiroshima-u.ac.jp>
+Date: Fri, 21 Nov 2025 14:14:33 +0900
+Subject: [PATCH 2/2] Update some VisualStudio project files to include
+ src/hvf/hvf.c, to fix the error at
+ https://gitlab.freedesktop.org/freetype/freetype/-/jobs/88070343
+
+* builds/windows/vc2010/freetype.vcxproj: Add hvf.c before ftlzw.c.
+* builds/windows/visualc/freetype.vcproj: Add hvf.c before pcf.c.
+* builds/windows/visualce/freetype.vcproj: Add hvf.c before pcf.c.
+---
+ builds/windows/vc2010/freetype.vcxproj  | 1 +
+ builds/windows/visualc/freetype.vcproj  | 4 ++++
+ builds/windows/visualce/freetype.vcproj | 4 ++++
+ 3 files changed, 9 insertions(+)
+
+diff --git a/builds/windows/vc2010/freetype.vcxproj b/builds/windows/vc2010/freetype.vcxproj
+index 671d12450..4efd9d460 100644
+--- a/builds/windows/vc2010/freetype.vcxproj
++++ b/builds/windows/vc2010/freetype.vcxproj
+@@ -475,6 +475,7 @@
+     <ClCompile Include="..\..\..\src\cid\type1cid.c" />
+     <ClCompile Include="..\..\..\src\dlg\dlgwrap.c" />
+     <ClCompile Include="..\..\..\src\gzip\ftgzip.c" />
++    <ClCompile Include="..\..\..\src\hvf\hvf.c" />
+     <ClCompile Include="..\..\..\src\lzw\ftlzw.c" />
+     <ClCompile Include="..\..\..\src\pcf\pcf.c" />
+     <ClCompile Include="..\..\..\src\pfr\pfr.c" />
+diff --git a/builds/windows/visualc/freetype.vcproj b/builds/windows/visualc/freetype.vcproj
+index a16782c23..6a5b9d697 100644
+--- a/builds/windows/visualc/freetype.vcproj
++++ b/builds/windows/visualc/freetype.vcproj
+@@ -493,6 +493,10 @@
+ 					RelativePath="..\..\..\src\base\ftwinfnt.c"
+ 					>
+ 				</File>
++				<File
++					RelativePath="..\..\..\src\hvf\hvf.c"
++					>
++				</File>
+ 				<File
+ 					RelativePath="..\..\..\src\pcf\pcf.c"
+ 					>
+diff --git a/builds/windows/visualce/freetype.vcproj b/builds/windows/visualce/freetype.vcproj
+index e271462bd..c4b4533b6 100644
+--- a/builds/windows/visualce/freetype.vcproj
++++ b/builds/windows/visualce/freetype.vcproj
+@@ -3612,6 +3612,10 @@
+ 					RelativePath="..\..\..\src\base\ftpatent.c"
+ 					>
+ 				</File>
++				<File
++					RelativePath="..\..\..\src\hvf\hvf.c"
++					>
++				</File>
+ 				<File
+ 					RelativePath="..\..\..\src\pcf\pcf.c"
+ 					>
+-- 
+GitLab
+
