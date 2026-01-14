@@ -8,5 +8,5 @@ on:
 
 jobs:
   build:
-    uses: mpvkit/action/.github/workflows/check_version.yml
+    uses: mpvkit/action/.github/workflows/check_version.yml@main
     secrets: inherit
