@@ -6,7 +6,7 @@ on:
     - cron: '0 0 1 * *' # every month first day
 
 jobs:
-  build:
+  check_version:
     uses: mpvkit/action/.github/workflows/check_version.yml@main
     secrets: inherit
     with:
