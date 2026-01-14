@@ -10,3 +10,6 @@ jobs:
   build:
     uses: mpvkit/action/.github/workflows/check_version.yml@main
     secrets: inherit
+    with:
+      repository: 'libass/libass'
+      library: 'libass'
