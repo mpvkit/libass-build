@@ -1,8 +1,9 @@
 import Foundation
+import BuildShared
 
 do {
     let options = try ArgumentOptions.parse(CommandLine.arguments)
-    try Build.performCommand(options)
+    try BuildRunner.performCommand(options)
 
     try BuildUnibreak().buildALL()
     try BuildFreetype().buildALL()
@@ -15,7 +16,7 @@ do {
 }
 
 
-enum Library: String, CaseIterable {
+enum Library: String, BuildLibrary, CaseIterable {
     case libunibreak, libfreetype, libfribidi, libharfbuzz, libass
     var version: String {
         switch self {
@@ -49,46 +50,46 @@ enum Library: String, CaseIterable {
     }
 
     // for generate Package.swift
-    var targets : [PackageTarget] {
+    var targets: [PackageTarget] {
         switch self {
         case .libunibreak:
             return  [
                 .target(
                     name: "Libunibreak",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libunibreak.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.checksum.txt"
                 ),
             ]
         case .libfreetype:
             return  [
                 .target(
                     name: "Libfreetype",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfreetype.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfreetype.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.checksum.txt"
                 ),
             ]
         case .libfribidi:
             return  [
                 .target(
                     name: "Libfribidi",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfribidi.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libfribidi.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.checksum.txt"
                 ),
             ]
         case .libharfbuzz:
             return  [
                 .target(
                     name: "Libharfbuzz",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libharfbuzz.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libharfbuzz.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.checksum.txt"
                 ),
             ]
         case .libass:
             return  [
                 .target(
                     name: "Libass",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libass.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BaseBuild.options.releaseVersion)/Libass.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libass.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libass.xcframework.checksum.txt"
                 ),
             ]
         }
@@ -99,6 +100,15 @@ enum Library: String, CaseIterable {
 private class BuildASS: BaseBuild {
     init() {
         super.init(library: .libass)
+    }
+
+    override func flagsDependencelibrarys() -> [any BuildLibrary] {
+        [
+            Library.libunibreak,
+            Library.libfreetype,
+            Library.libfribidi,
+            Library.libharfbuzz,
+        ]
     }
 
     override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
