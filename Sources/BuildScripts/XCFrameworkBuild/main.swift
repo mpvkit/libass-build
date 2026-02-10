@@ -1,17 +1,9 @@
 import Foundation
 import BuildShared
 
-typealias PackageTarget = BuildShared.PackageTarget
-typealias PlatformType = BuildShared.PlatformType
-typealias ArchType = BuildShared.ArchType
-typealias BaseBuild = BuildShared.BaseBuild
-typealias ArgumentOptions = BuildShared.ArgumentOptions
-typealias BuildRunner = BuildShared.BuildRunner
-typealias SharedBuildOptions = BuildShared.SharedBuildOptions
-
 do {
-    let options = try ArgumentOptions.parse(CommandLine.arguments)
-    try BuildRunner.performCommand(options)
+    let options = try BuildShared.ArgumentOptions.parse(CommandLine.arguments)
+    try BuildShared.BuildRunner.performCommand(options)
 
     try BuildUnibreak().buildALL()
     try BuildFreetype().buildALL()
@@ -24,7 +16,7 @@ do {
 }
 
 
-enum Library: String, BuildLibrary, CaseIterable {
+enum Library: String, BuildShared.BuildLibrary, CaseIterable {
     case libunibreak, libfreetype, libfribidi, libharfbuzz, libass
     var version: String {
         switch self {
@@ -58,46 +50,46 @@ enum Library: String, BuildLibrary, CaseIterable {
     }
 
     // for generate Package.swift
-    var targets: [PackageTarget] {
+    var targets: [BuildShared.PackageTarget] {
         switch self {
         case .libunibreak:
             return  [
                 .target(
                     name: "Libunibreak",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libunibreak.xcframework.checksum.txt"
                 ),
             ]
         case .libfreetype:
             return  [
                 .target(
                     name: "Libfreetype",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libfreetype.xcframework.checksum.txt"
                 ),
             ]
         case .libfribidi:
             return  [
                 .target(
                     name: "Libfribidi",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libfribidi.xcframework.checksum.txt"
                 ),
             ]
         case .libharfbuzz:
             return  [
                 .target(
                     name: "Libharfbuzz",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libharfbuzz.xcframework.checksum.txt"
                 ),
             ]
         case .libass:
             return  [
                 .target(
                     name: "Libass",
-                    url: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libass.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(SharedBuildOptions.releaseVersion)/Libass.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libass.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/libass-build/releases/download/\(BuildShared.SharedBuildOptions.releaseVersion)/Libass.xcframework.checksum.txt"
                 ),
             ]
         }
@@ -105,12 +97,12 @@ enum Library: String, BuildLibrary, CaseIterable {
 }
 
 
-private class BuildASS: BaseBuild {
+private class BuildASS: BuildShared.BaseBuild {
     init() {
         super.init(library: .libass)
     }
 
-    override func flagsDependencelibrarys() -> [any BuildLibrary] {
+    override func flagsDependencelibrarys() -> [any BuildShared.BuildLibrary] {
         [
             Library.libunibreak,
             Library.libfreetype,
@@ -119,7 +111,7 @@ private class BuildASS: BaseBuild {
         ]
     }
 
-    override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
+    override func arguments(platform: BuildShared.PlatformType, arch: BuildShared.ArchType) -> [String] {
         [
             "-Dlibunibreak=enabled",
             "-Dcoretext=enabled",
@@ -136,12 +128,12 @@ private class BuildASS: BaseBuild {
 }
 
 
-private class BuildUnibreak: BaseBuild {
+private class BuildUnibreak: BuildShared.BaseBuild {
     init() {
         super.init(library: .libunibreak)
     }
 
-    override func arguments(platform: PlatformType, arch: ArchType) -> [String] {
+    override func arguments(platform: BuildShared.PlatformType, arch: BuildShared.ArchType) -> [String] {
         [
             "--enable-static",
             "--disable-shared",
@@ -152,12 +144,12 @@ private class BuildUnibreak: BaseBuild {
     }
 }
 
-private class BuildFreetype: BaseBuild {
+private class BuildFreetype: BuildShared.BaseBuild {
     init() {
         super.init(library: .libfreetype)
     }
 
-    override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
+    override func arguments(platform: BuildShared.PlatformType, arch: BuildShared.ArchType) -> [String] {
         [
             "-Dzlib=enabled",
             "-Dharfbuzz=disabled", 
@@ -170,12 +162,12 @@ private class BuildFreetype: BaseBuild {
 }
 
 
-private class BuildFribidi: BaseBuild {
+private class BuildFribidi: BuildShared.BaseBuild {
     init() {
         super.init(library: .libfribidi)
     }
 
-    override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
+    override func arguments(platform: BuildShared.PlatformType, arch: BuildShared.ArchType) -> [String] {
         [
             "-Ddeprecated=false",
             "-Ddocs=false",
@@ -185,12 +177,12 @@ private class BuildFribidi: BaseBuild {
     }
 }
 
-private class BuildHarfbuzz: BaseBuild {
+private class BuildHarfbuzz: BuildShared.BaseBuild {
     init() {
         super.init(library: .libharfbuzz)
     }
 
-    override func arguments(platform : PlatformType, arch : ArchType) -> [String] {
+    override func arguments(platform: BuildShared.PlatformType, arch: BuildShared.ArchType) -> [String] {
         [
             "-Dglib=disabled",
             "-Dfreetype=disabled",
