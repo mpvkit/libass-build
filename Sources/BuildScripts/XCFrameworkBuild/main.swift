@@ -1,6 +1,14 @@
 import Foundation
 import BuildShared
 
+typealias PackageTarget = BuildShared.PackageTarget
+typealias PlatformType = BuildShared.PlatformType
+typealias ArchType = BuildShared.ArchType
+typealias BaseBuild = BuildShared.BaseBuild
+typealias ArgumentOptions = BuildShared.ArgumentOptions
+typealias BuildRunner = BuildShared.BuildRunner
+typealias SharedBuildOptions = BuildShared.SharedBuildOptions
+
 do {
     let options = try ArgumentOptions.parse(CommandLine.arguments)
     try BuildRunner.performCommand(options)

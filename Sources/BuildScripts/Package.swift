@@ -7,7 +7,7 @@ let package = Package(
     products: [
     ],
     dependencies: [
-        .package(url: "https://github.com/mpvkit/BuildShared.git", branch: "main"),
+        .package(url: "https://github.com/mpvkit/BuildShared.git", revision: "2aa2c4cc38aa8fbf001eeaebaae13de1e14ea24f"),
     ],
     targets: [
         .executableTarget(
@@ -16,7 +16,7 @@ let package = Package(
                 .product(name: "BuildShared", package: "BuildShared"),
             ],
             path: "XCFrameworkBuild",
-            sources: ["main.swift", "base.swift"]
+            sources: ["main.swift"]
         )
     ]
 )
