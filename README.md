@@ -2,6 +2,9 @@
 
 build scripts for [libass](https://github.com/libass/libass)
 
+> This is a component of the [MPVKit](https://github.com/mpvkit/MPVKit) project.
+
+
 ## Installation
 
 ### Swift Package Manager
